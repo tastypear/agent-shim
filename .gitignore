@@ -14,6 +14,9 @@ node_modules/
 .agent-shim-cache-*.json
 .remote-bridge-cache.json
 
+# Per-profile agent data (runtime-generated, isolated by connection+vcwd)
+profiles/
+
 # Private knowledge base
 knowledge-base/*
 !knowledge-base/README.md
