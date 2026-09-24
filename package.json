@@ -8,7 +8,8 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "test": "node --test test/unit/"
+    "test": "node --test \"test/unit/*.test.js\"",
+    "test:integration": "node test/integration/remote-verify.js"
   },
   "keywords": ["ssh", "sftp", "remote", "bridge", "shim", "preload", "agent"],
   "dependencies": {
