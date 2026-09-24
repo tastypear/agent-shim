@@ -1,0 +1,115 @@
+# Adapter API
+
+agent-shim's core modules (`lib/core/`) contain zero agent-specific logic. Everything that
+depends on a particular agent lives in an **adapter** under `lib/adapters/`. Core modules
+call adapter methods to decide routing, env, role detection, and FS behavior.
+
+To support a new Node-based agent, implement this interface and register it in
+`lib/adapters/index.js`'s `select()`.
+
+## Interface
+
+An adapter module exports `{ detectRole, create }`:
+
+- `detectRole(mainScript): "dispatcher" | "agent" | "helper" | "unknown"` — given the
+  normalized main script path, identify the launch role. The entry point patches fully
+  only for the `"agent"` role; `"dispatcher"` hands a clean env to a child; `"helper"`
+  skips patches and suppresses stderr.
+- `create(cfg): Adapter` — construct the adapter from the resolved config.
+
+`Adapter` methods (all except `name` are optional-ish; the null adapter shows the defaults):
+
+### Identity
+
+- `name: string` — adapter identifier (`"qoder"`, `"pi"`, `"none"`).
+
+### Spawn / exec routing
+
+- `isHostInternalCmd(cmd: string): boolean` — given a `bash -c` command string, return
+  `true` if it's a host-internal helper that must run locally (references Windows paths,
+  can't run on the remote). qoder uses this for its snapshot/security/ensure-deps scripts.
+- `interceptSpawn(exe, args, opts): object | null` — given a binary + args, return a
+  synthetic child object to short-circuit spawn, or `null` to let normal routing proceed.
+  qoder uses this to intercept `runtime-info-linux-x64`, an ELF binary Windows can't run.
+
+### Environment
+
+- `getDefaultEnv(): Object<string,string>` — env vars the bridge structurally requires
+  (not user preferences). Lowest-priority layer: real `process.env` > `config.env` > these.
+  qoder returns `CLI_INTEGRATION_TEST=true` (skip auto-update) and
+  `QODER_TERMINAL_PTY_BACKEND=in-process`.
+- `getLocalBash(): string` — path to a local `bash.exe` for host-internal commands, or
+  `""`. Probe agent-specific locations first (qoder checks `~/.qoder/bin/git/...`), then
+  fall back to `findInPath()` (which skips the WSL launcher).
+
+### FS behavior
+
+- `getPrefetchPaths(cwd, parent): { exists: string[], stat: string[] }` — paths to batch-
+  prefetch at startup (one `test -e` / `stat -c` round-trip each) so the agent's first
+  `existsSync`/`statSync` calls hit cache. The prefetch mechanism itself is in core.
+- `getSwallowEnoentPatterns(): RegExp[]` — `readdir` ENOENT matching these patterns
+  returns `[]` instead of throwing. qoder uses `/\/\.qoder\/worktrees\//` (worktree
+  creation flow expects missing dirs).
+
+### Platform declarations
+
+- `needsOsReleaseFake(): boolean` — if `true` and no `osRelease` is configured, core
+  probes `uname -r` so the agent's `OS Version:` prompt is self-consistent with
+  `platform=linux`. `false` leaves the real `os.release()` alone.
+
+### Diagnostics
+
+- `getExitCheckPath(): string | null` — where to write an exit-check sentinel file (or
+  `null` to skip). qoder returns `null`.
+
+## Example: a minimal adapter
+
+```js
+// lib/adapters/myagent.js
+const { findInPath } = require("../local-bash");
+
+function detectRole(mainScript) {
+  if (mainScript.endsWith("myagent.js")) return "agent";
+  return "unknown";
+}
+
+function create(cfg) {
+  return {
+    name: "myagent",
+    isHostInternalCmd: () => false,
+    interceptSpawn: () => null,
+    getDefaultEnv: () => ({}),
+    getLocalBash: () => cfg.localBash || findInPath(),
+    getPrefetchPaths: (cwd) => ({ exists: [cwd + "/.config"], stat: [cwd] }),
+    getSwallowEnoentPatterns: () => [],
+    needsOsReleaseFake: () => true,
+    getExitCheckPath: () => null,
+  };
+}
+
+module.exports = { detectRole, create };
+```
+
+Register it in `lib/adapters/index.js`:
+
+```js
+const qoder = require("./qoder");
+const myagent = require("./myagent");
+const nullAdapter = require("./null");
+
+function select(mainScript, cfg) {
+  if (qoder.detectRole(mainScript) !== "unknown")
+    return { role: qoder.detectRole(mainScript), adapter: qoder.create(cfg) };
+  if (myagent.detectRole(mainScript) !== "unknown")
+    return { role: myagent.detectRole(mainScript), adapter: myagent.create(cfg) };
+  return { role: "unknown", adapter: nullAdapter.create(cfg) };
+}
+```
+
+## Designing for a new agent
+
+When adding a method or a coupling point, ask: **would this value differ for another
+agent?** If yes, it belongs on the adapter; if it's a general mechanism (rg routing,
+fd-based stdio sync/async decision, TTL cache), it stays in core with no agent strings.
+
+The core invariant: `grep -ri <agent-name> lib/core/` returns zero hits.

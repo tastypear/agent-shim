@@ -11,7 +11,14 @@
     "test": "node --test \"test/unit/*.test.js\"",
     "test:integration": "node test/integration/remote-verify.js"
   },
-  "keywords": ["ssh", "sftp", "remote", "bridge", "shim", "preload", "agent"],
+  "keywords": ["ssh", "sftp", "remote", "bridge", "shim", "preload", "agent", "qoder"],
+  "license": "MIT",
+  "files": [
+    "lib/",
+    "remote-default.json",
+    ".agent-shim.example.json",
+    "README.md"
+  ],
   "dependencies": {
     "socks": "^2.8.10",
     "ssh2": "^1.17.0"
