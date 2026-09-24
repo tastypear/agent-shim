@@ -76,14 +76,15 @@ never routes through the remote SFTP bridge.
 
 ## Data isolation
 
-qoder keys its conversation history by working directory, so two remotes that both expose
-`/root` would share one history. agent-shim prevents this by giving each connection its own
-agent data root: it sets `QODER_CLI_HOME` (qoder's native data-dir override) to a per-profile
-directory derived from `host:port:user` + `vcwd`, so sessions, auth, and logs never
-cross-contaminate across connections or workspaces.
+The agent keys its conversation history by working directory, so two remotes that both
+expose `/root` would share one history. agent-shim prevents this by giving each connection
+its own agent data root via the agent's native data-dir env (`QODER_CLI_HOME` for qoder,
+`PI_CODING_AGENT_DIR` for Pi), set to a per-profile directory derived from `host:port:user`
++ `vcwd`, so sessions, auth, and logs never cross-contaminate across connections or
+workspaces.
 
 - **On by default.** Each `host:port:user` + `vcwd` combo gets `<dataDir>/profiles/<hash>-<vcwd>/`.
-- `paths.isolateData: "false"` — opt out; use the agent's default `~/.qoder`.
+- `paths.isolateData: "false"` — opt out; use the agent's default data dir.
 - `paths.dataDir` — directory holding the profile subdirs (default: same as `cachePath`).
 - `paths.cliHome` — explicit absolute path for the data root (advanced; skips auto-derivation).
 - A user-set `QODER_CLI_HOME` env var always wins (highest priority).
@@ -91,10 +92,43 @@ cross-contaminate across connections or workspaces.
 ## Adapters
 
 agent-shim's core knows nothing about a specific agent. Agent-specific logic lives in an
-adapter under `lib/adapters/`. The qoder adapter (`lib/adapters/qoder.js`) recognizes
-qoder's entry files, intercepts its Linux-ELF runtime binary, sets its required env vars,
-and declares its prefetch/swallow-ENOENT paths. A null adapter (`lib/adapters/null.js`)
-passes everything through for non-agent programs.
+adapter under `lib/adapters/`:
+
+- **qoder** (`lib/adapters/qoder.js`) — recognizes qoder's entry files, intercepts its
+  Linux-ELF runtime binary, sets its required env vars, declares prefetch/swallow-ENOENT
+  paths, and isolates data via `QODER_CLI_HOME`.
+- **pi** (`lib/adapters/pi.js`) — recognizes Pi's `dist/bundle/cli.js` entry, isolates data
+  via `PI_CODING_AGENT_DIR`, and seeds the profile dir with `models.json`/`settings.json`
+  from the config's `agent.llm` block so an isolated profile has the LLM endpoint without
+  manual setup. Pi uses `cross-spawn` (which delegates to `child_process.spawn` on non-win32
+  — our `platform=linux` patch makes Pi take the native-spawn path, which we intercept).
+- **null** (`lib/adapters/null.js`) — passes everything through for non-agent programs.
+
+### Pi LLM configuration
+
+Pi reads its LLM provider from `models.json` in its agent dir. When data isolation is on,
+agent-shim seeds this file from the config's `agent.llm` block on first run:
+
+```json
+{
+  "ssh": { "host": "...", "user": "root", "port": 22, "keyPath": "~/.ssh/id_ed25519" },
+  "paths": { "vcwd": "/root" },
+  "agent": {
+    "llm": {
+      "providerId": "my-provider",
+      "baseUrl": "https://your-endpoint/v1",
+      "api": "openai-responses",
+      "apiKey": "your-key",
+      "models": [
+        { "id": "model-name", "contextWindow": 300000, "maxTokens": 128000 }
+      ]
+    }
+  }
+}
+```
+
+The file is only written if absent — never overwrites your edits. To re-seed, delete the
+`models.json` in the profile dir.
 
 To support a new agent, implement the adapter interface — see
 [docs/adapter-api.md](docs/adapter-api.md).
