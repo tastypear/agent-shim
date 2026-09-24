@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Runtime logs / trace
+*.log
+
+# Private configs (host/user/keyPath — keep example + default in tree)
+.agent-shim.json
+.agent-shim-*.json
+.remote-bridge.json
+.remote-bridge-*.json
+
+# Per-connection probe cache
+.agent-shim-cache-*.json
+.remote-bridge-cache.json
+
+# Private knowledge base
+knowledge-base/*
+!knowledge-base/README.md
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*.swo

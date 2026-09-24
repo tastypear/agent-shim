@@ -1,0 +1,14 @@
+{
+  "ssh": {
+    "port": 22,
+    "keyPath": "~/.ssh/id_ed25519"
+  },
+  "paths": {
+    "ssh2": "./node_modules/ssh2",
+    "osRelease": "",
+    "socksProxy": ""
+  },
+  "env": {},
+  "keepalive": 5000,
+  "readyTimeout": 15000
+}
