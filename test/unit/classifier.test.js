@@ -14,6 +14,24 @@ test("isRemote: drive-qualified Windows paths are NOT remote", () => {
   assert.equal(isRemote("D:\\program"), false);
 });
 
+test("isRemote: MSYS/git-bash drive forms (/c/, /d/) are NOT remote", () => {
+  // local bash pwd produces these; without the rule they'd be mistaken for remote posix paths
+  assert.equal(isRemote("/c/Users/tastypear"), false);
+  assert.equal(isRemote("/c/Users/tastypear/AppData/Roaming/npm/node_modules"), false);
+  assert.equal(isRemote("/d/program/agent-shim"), false);
+  assert.equal(isRemote("/z/foo"), false);
+});
+
+test("isRemote: multi-letter posix roots ARE still remote (not confused with MSYS drives)", () => {
+  assert.equal(isRemote("/root"), true);
+  assert.equal(isRemote("/home/user"), true);
+  assert.equal(isRemote("/etc/os-release"), true);
+  assert.equal(isRemote("/usr/bin/bash"), true);
+  assert.equal(isRemote("/proc/version"), true);
+  assert.equal(isRemote("/var/log"), true);
+  assert.equal(isRemote("/opt/app"), true);
+});
+
 test("isRemote: relative and bare names are not remote", () => {
   assert.equal(isRemote("foo.txt"), false);
   assert.equal(isRemote("./foo"), false);

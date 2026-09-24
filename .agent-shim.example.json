@@ -12,7 +12,10 @@
     "osRelease": "6.5.0-14-generic",
     "home": "",
     "socksProxy": "",
-    "cachePath": ""
+    "cachePath": "",
+    "isolateData": "",
+    "dataDir": "",
+    "cliHome": ""
   },
   "env": {},
   "keepalive": 5000,

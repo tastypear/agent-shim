@@ -1,0 +1,26 @@
+{
+  "run_id": "2026-09-24T19-19-26-713+08-00-naeb9c-p62352",
+  "started_at": "2026-09-24T19:19:26.713+08:00",
+  "pid": 62352,
+  "ppid": 57188,
+  "process_role": "main",
+  "cli_version": "1.1.57",
+  "node_version": "v24.18.0",
+  "platform": "linux",
+  "arch": "x64",
+  "cwd": "/root",
+  "project_id": "-root",
+  "argv": [
+    "C:\\Program Files\\nodejs\\node.exe",
+    "C:\\Users\\tastypear\\node_modules\\@qoder-ai\\qodercli\\bundle\\qodercli.js",
+    "--help"
+  ],
+  "env_flags": {
+    "debug": false,
+    "remote_worker": false,
+    "ci": false
+  },
+  "log_files": {
+    "process": "qodercli.log"
+  }
+}

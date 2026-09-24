@@ -74,6 +74,20 @@ Structured logger with levels `error` / `warn` / `info` (default) / `debug` / `t
 The logger captures the original `fs` at module load, before any patching, so its output
 never routes through the remote SFTP bridge.
 
+## Data isolation
+
+qoder keys its conversation history by working directory, so two remotes that both expose
+`/root` would share one history. agent-shim prevents this by giving each connection its own
+agent data root: it sets `QODER_CLI_HOME` (qoder's native data-dir override) to a per-profile
+directory derived from `host:port:user` + `vcwd`, so sessions, auth, and logs never
+cross-contaminate across connections or workspaces.
+
+- **On by default.** Each `host:port:user` + `vcwd` combo gets `<dataDir>/profiles/<hash>-<vcwd>/`.
+- `paths.isolateData: "false"` — opt out; use the agent's default `~/.qoder`.
+- `paths.dataDir` — directory holding the profile subdirs (default: same as `cachePath`).
+- `paths.cliHome` — explicit absolute path for the data root (advanced; skips auto-derivation).
+- A user-set `QODER_CLI_HOME` env var always wins (highest priority).
+
 ## Adapters
 
 agent-shim's core knows nothing about a specific agent. Agent-specific logic lives in an
