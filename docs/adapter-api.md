@@ -68,9 +68,6 @@ An adapter module exports `{ detectRole, create }`:
   var name + value the agent uses to override its data root (qoder: `QODER_CLI_HOME`,
   Pi: `PI_CODING_AGENT_DIR`), or `null` if the agent has no such override. Core sets this
   env (if the user hasn't) and creates the profile dir.
-- `initProfileDir(profileDir): void` — optional. Called after the profile dir is created.
-  Use to seed agent config files (e.g. Pi's `models.json`) from the shim config so an
-  isolated profile is ready to use. Only write files that are absent — never overwrite.
 
 ## Example: a minimal adapter
 

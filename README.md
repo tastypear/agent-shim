@@ -97,38 +97,12 @@ adapter under `lib/adapters/`:
 - **qoder** (`lib/adapters/qoder.js`) — recognizes qoder's entry files, intercepts its
   Linux-ELF runtime binary, sets its required env vars, declares prefetch/swallow-ENOENT
   paths, and isolates data via `QODER_CLI_HOME`.
-- **pi** (`lib/adapters/pi.js`) — recognizes Pi's `dist/bundle/cli.js` entry, isolates data
-  via `PI_CODING_AGENT_DIR`, and seeds the profile dir with `models.json`/`settings.json`
-  from the config's `agent.llm` block so an isolated profile has the LLM endpoint without
-  manual setup. Pi uses `cross-spawn` (which delegates to `child_process.spawn` on non-win32
-  — our `platform=linux` patch makes Pi take the native-spawn path, which we intercept).
+- **pi** (`lib/adapters/pi.js`) — recognizes Pi's `dist/bundle/cli.js` entry and isolates
+  data via `PI_CODING_AGENT_DIR`. Pi uses `cross-spawn` (which delegates to
+  `child_process.spawn` on non-win32 — our `platform=linux` patch makes Pi take the
+  native-spawn path, which we intercept). Pi's own config (`models.json`, `settings.json`)
+  lives in its agent dir and is managed by the user — agent-shim does not seed or override it.
 - **null** (`lib/adapters/null.js`) — passes everything through for non-agent programs.
-
-### Pi LLM configuration
-
-Pi reads its LLM provider from `models.json` in its agent dir. When data isolation is on,
-agent-shim seeds this file from the config's `agent.llm` block on first run:
-
-```json
-{
-  "ssh": { "host": "...", "user": "root", "port": 22, "keyPath": "~/.ssh/id_ed25519" },
-  "paths": { "vcwd": "/root" },
-  "agent": {
-    "llm": {
-      "providerId": "my-provider",
-      "baseUrl": "https://your-endpoint/v1",
-      "api": "openai-responses",
-      "apiKey": "your-key",
-      "models": [
-        { "id": "model-name", "contextWindow": 300000, "maxTokens": 128000 }
-      ]
-    }
-  }
-}
-```
-
-The file is only written if absent — never overwrites your edits. To re-seed, delete the
-`models.json` in the profile dir.
 
 To support a new agent, implement the adapter interface — see
 [docs/adapter-api.md](docs/adapter-api.md).
