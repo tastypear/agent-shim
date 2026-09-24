@@ -10,6 +10,7 @@
     "ssh2": "./node_modules/ssh2",
     "localBash": "",
     "osRelease": "6.5.0-14-generic",
+    "home": "",
     "socksProxy": "",
     "cachePath": ""
   },
