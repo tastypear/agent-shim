@@ -57,27 +57,31 @@ test("isLocal is the inverse of isRemote", () => {
   assert.equal(isLocal("bash"), true);
 });
 
-// ===== Virtual workspace prefix /__box/<id>/ =====
+// ===== Virtual workspace prefix /◦<host∶port>/ =====
+// ◦ = U+25E6 (white bullet), ∶ = U+2236 (ratio, Windows-safe colon substitute)
+
+const D = "\u25E6";   // ◦
+const R = "\u2236";   // ∶
 
 test("isRemote: virtual workspace paths ARE remote (posix-absolute, drive-less)", () => {
-  assert.equal(isRemote("/__box/a1b2c3d4e5f6/root"), true);
-  assert.equal(isRemote("/__box/abc123def456/home/me/proj"), true);
+  assert.equal(isRemote("/" + D + "maigejb.com" + R + "22/root"), true);
+  assert.equal(isRemote("/" + D + "127.0.0.1" + R + "22/home/me/proj"), true);
 });
 
-test("hasWorkspacePrefix: detects /__box/<hex12>/", () => {
-  assert.equal(hasWorkspacePrefix("/__box/a1b2c3d4e5f6/root"), true);
-  assert.equal(hasWorkspacePrefix("/__box/a1b2c3d4e5f6/"), true);
+test("hasWorkspacePrefix: detects /◦<host∶port>/", () => {
+  assert.equal(hasWorkspacePrefix("/" + D + "maigejb.com" + R + "22/root"), true);
+  assert.equal(hasWorkspacePrefix("/" + D + "127.0.0.1" + R + "22/"), true);
   assert.equal(hasWorkspacePrefix("/root"), false);
-  assert.equal(hasWorkspacePrefix("/__box/short/root"), false);       // id too short
-  assert.equal(hasWorkspacePrefix("/__box/Z1b2c3d4e5f6/root"), false); // non-hex id
-  assert.equal(hasWorkspacePrefix("/__boxroot"), false);
+  assert.equal(hasWorkspacePrefix("/" + D + "noport/root"), false);        // missing ∶port
+  assert.equal(hasWorkspacePrefix("/" + D + "host" + R + "abc/root"), false); // port not digits
+  assert.equal(hasWorkspacePrefix("/" + D + "root"), false);               // no slash after
 });
 
-test("toRemote: strips /__box/<id>/ prefix, keeps the real path posix-absolute", () => {
-  assert.equal(toRemote("/__box/a1b2c3d4e5f6/root"), "/root");
-  assert.equal(toRemote("/__box/abc123def456/home/me/foo.js"), "/home/me/foo.js");
-  assert.equal(toRemote("/__box/a1b2c3d4e5f6/"), "/");
-  assert.equal(toRemote("/__box/000000000000/etc/os-release"), "/etc/os-release");
+test("toRemote: strips /◦<host∶port>/ prefix, keeps the real path posix-absolute", () => {
+  assert.equal(toRemote("/" + D + "maigejb.com" + R + "22/root"), "/root");
+  assert.equal(toRemote("/" + D + "127.0.0.1" + R + "22/home/me/foo.js"), "/home/me/foo.js");
+  assert.equal(toRemote("/" + D + "maigejb.com" + R + "22/"), "/");
+  assert.equal(toRemote("/" + D + "host.example.org" + R + "2222/etc/os-release"), "/etc/os-release");
 });
 
 test("toRemote: non-prefixed paths behave as before (slash + drive normalization)", () => {
@@ -85,18 +89,18 @@ test("toRemote: non-prefixed paths behave as before (slash + drive normalization
   assert.equal(toRemote("C:/root/foo"), "/root/foo");
 });
 
-test("makeVirtualCwd: builds /__box/<id>/<realvcwd>", () => {
-  assert.equal(makeVirtualCwd("a1b2c3d4e5f6", "/root"), "/__box/a1b2c3d4e5f6/root");
-  assert.equal(makeVirtualCwd("a1b2c3d4e5f6", "/home/me/proj"), "/__box/a1b2c3d4e5f6/home/me/proj");
+test("makeVirtualCwd: builds /◦<id>/<realvcwd>", () => {
+  assert.equal(makeVirtualCwd("maigejb.com" + R + "22", "/root"), "/" + D + "maigejb.com" + R + "22/root");
+  assert.equal(makeVirtualCwd("127.0.0.1" + R + "22", "/home/me/proj"), "/" + D + "127.0.0.1" + R + "22/home/me/proj");
   // relative vcwd gets a leading slash
-  assert.equal(makeVirtualCwd("a1b2c3d4e5f6", "root"), "/__box/a1b2c3d4e5f6/root");
+  assert.equal(makeVirtualCwd("maigejb.com" + R + "22", "root"), "/" + D + "maigejb.com" + R + "22/root");
 });
 
 test("makeVirtualCwd + toRemote round-trip two distinct connections (session isolation)", () => {
   // Two remotes both exposing /root get distinct virtual cwds → distinct CB hashes,
   // but toRemote maps both back to the same real /root for fs/exec routing.
-  const connA = makeVirtualCwd("a1b2c3d4e5f6", "/root");
-  const connB = makeVirtualCwd("b2c3d4e5f6a1", "/root");
+  const connA = makeVirtualCwd("maigejb.com" + R + "22", "/root");
+  const connB = makeVirtualCwd("127.0.0.1" + R + "22", "/root");
   assert.notEqual(connA, connB);
   assert.equal(toRemote(connA), "/root");
   assert.equal(toRemote(connB), "/root");

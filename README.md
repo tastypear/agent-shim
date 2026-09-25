@@ -78,16 +78,17 @@ never routes through the remote SFTP bridge.
 
 The agent keys its conversation history by working directory, so two remotes that both
 expose `/root` would share one history. agent-shim prevents this with a **virtual workspace
-prefix**: the agent sees its cwd as `/__box/<id>/<real-vcwd>`, where `<id>` is
-`sha256(host:user:port)[:12]`. The agent's session-key hash (which does not normalize the
-path) then buckets each connection distinctly, even when two remotes expose the same `/root`.
+prefix**: the agent sees its cwd as `/◦<host∶port>/<real-vcwd>` (◦ = U+25E6, ∶ = U+2236 — a
+Windows-safe ratio used in place of the forbidden colon). The agent's session-key hash
+(which does not normalize the path) then buckets each connection distinctly, even when two
+remotes expose the same `/root`.
 
 The prefix is stripped transparently before any `fs`/`child_process` op reaches the remote,
 so the remote shell and SFTP see the real path. The agent's data root (`.qoder`, `~/.pi/agent`)
 is **shared natively** — auth, LLM config, and settings are reused across connections, only
 conversation history is isolated.
 
-- **On by default.** No config needed; each `host:port:user` gets a distinct `/__box/<id>/`.
+- **On by default.** No config needed; each `host:port` gets a distinct `/◦<host∶port>/`.
 - `paths.isolateData: "profile"` — opt into the legacy per-profile data root (separate
   `QODER_CLI_HOME`/`PI_CODING_AGENT_DIR` per connection, isolating auth/LLM config too).
 - `paths.dataDir` / `paths.cliHome` — directory / explicit path for the legacy profile dir.
