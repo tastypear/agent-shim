@@ -77,17 +77,21 @@ never routes through the remote SFTP bridge.
 ## Data isolation
 
 The agent keys its conversation history by working directory, so two remotes that both
-expose `/root` would share one history. agent-shim prevents this by giving each connection
-its own agent data root via the agent's native data-dir env (`QODER_CLI_HOME` for qoder,
-`PI_CODING_AGENT_DIR` for Pi), set to a per-profile directory derived from `host:port:user`
-+ `vcwd`, so sessions, auth, and logs never cross-contaminate across connections or
-workspaces.
+expose `/root` would share one history. agent-shim prevents this with a **virtual workspace
+prefix**: the agent sees its cwd as `/__box/<id>/<real-vcwd>`, where `<id>` is
+`sha256(host:user:port)[:12]`. The agent's session-key hash (which does not normalize the
+path) then buckets each connection distinctly, even when two remotes expose the same `/root`.
 
-- **On by default.** Each `host:port:user` + `vcwd` combo gets `<dataDir>/profiles/<hash>-<vcwd>/`.
-- `paths.isolateData: "false"` — opt out; use the agent's default data dir.
-- `paths.dataDir` — directory holding the profile subdirs (default: same as `cachePath`).
-- `paths.cliHome` — explicit absolute path for the data root (advanced; skips auto-derivation).
-- A user-set `QODER_CLI_HOME` env var always wins (highest priority).
+The prefix is stripped transparently before any `fs`/`child_process` op reaches the remote,
+so the remote shell and SFTP see the real path. The agent's data root (`.qoder`, `~/.pi/agent`)
+is **shared natively** — auth, LLM config, and settings are reused across connections, only
+conversation history is isolated.
+
+- **On by default.** No config needed; each `host:port:user` gets a distinct `/__box/<id>/`.
+- `paths.isolateData: "profile"` — opt into the legacy per-profile data root (separate
+  `QODER_CLI_HOME`/`PI_CODING_AGENT_DIR` per connection, isolating auth/LLM config too).
+- `paths.dataDir` / `paths.cliHome` — directory / explicit path for the legacy profile dir.
+- A user-set `QODER_CLI_HOME` (or `PI_CODING_AGENT_DIR`) env var always wins (highest priority).
 
 ## Adapters
 
