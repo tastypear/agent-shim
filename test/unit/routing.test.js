@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   isBash, isRg, shellQuote, buildRgRemoteCmd, buildRemoteCmd, wrapSpawn, routeExecCommand,
+  extractEval,
 } = require("../../lib/exec-bridge/routing");
 
 const mockAdapter = {
@@ -89,6 +90,34 @@ test("wrapSpawn: bash -c eval '...' extracts the inner command", () => {
   const r = wrapSpawn("bash", ["-c", "eval 'git status'"], {}, mockAdapter, getRemoteCwd);
   assert.equal(r.exe, "__sftp_exec__");
   assert.equal(r.args[0], "cd '/root' && git status");
+});
+
+test("extractEval: simple single-quoted argument", () => {
+  assert.equal(extractEval("eval 'git status'"), "git status");
+  assert.equal(extractEval("preamble && eval 'ls -la' < /dev/null"), "ls -la");
+});
+
+test("extractEval: handles '\"'\"' single-quote escape (qoder Unicode-path pattern)", () => {
+  // qoder shell-quotes paths containing non-ASCII chars, escaping inner quotes as '"'"'
+  const cmd = "eval 'cat '\"'\"'/root/◦probe'\"'\"' 2>&1; echo \"rc=True\"' < /dev/null";
+  assert.equal(extractEval(cmd), "cat '/root/◦probe' 2>&1; echo \"rc=True\"");
+});
+
+test("extractEval: handles '\\'' single-quote escape idiom", () => {
+  const cmd = "eval 'cat '\\''/root/x'\\'' 2>&1'";
+  assert.equal(extractEval(cmd), "cat '/root/x' 2>&1");
+});
+
+test("extractEval: returns null when no eval present", () => {
+  assert.equal(extractEval("ls -la"), null);
+  assert.equal(extractEval("reval 'x'"), null);
+});
+
+test("wrapSpawn: eval with Unicode single-quoted path is not truncated", () => {
+  const cmd = "{ source 'C:/snap.sh' 2>/dev/null || true; } && eval 'cat '\"'\"'/root/◦probe'\"'\"' 2>&1; echo \"rc=True\"' < /dev/null && pwd -P >| 'cwd'";
+  const r = wrapSpawn("bash", ["-c", cmd], {}, mockAdapter, getRemoteCwd);
+  assert.equal(r.exe, "__sftp_exec__");
+  assert.equal(r.args[0], "cd '/root' && cat '/root/◦probe' 2>&1; echo \"rc=True\"");
 });
 
 test("routeExecCommand: generic command wraps with cd remote", () => {
