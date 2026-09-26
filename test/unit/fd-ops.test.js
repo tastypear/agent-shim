@@ -66,3 +66,35 @@ test("fd-based ops pass through to native for real local fds (no EBADF)", () => 
   assert.equal(fs.readFileSync(tmp, "utf8"), "native");
   try { fs.unlinkSync(tmp); } catch (e) {}
 });
+
+test("proper-lockfile acquire/release cycle: mkdir lockdir then rmdir releases it", async () => {
+  // Reproduces the "first save ok, second save errors" root cause: lock acquire uses
+  // async fs.mkdir (patched), release uses async fs.rmdir (was unpatched). After release
+  // the lock dir must be gone so a second acquire succeeds. Mirrors proper-lockfile's
+  // actual calls: fs.mkdir(path, cb) and fs.rmdir(path, cb), no options.
+  const lockDir = "/root/.settings.json.lock";
+  const mkdirAsync = () => new Promise((res, rej) =>
+    fs.mkdir(lockDir, (err) => (err && err.code !== "EEXIST" ? rej(err) : res())));
+  const rmdirAsync = () => new Promise((res, rej) =>
+    fs.rmdir(lockDir, (err) => (err ? rej(err) : res())));
+  await mkdirAsync();
+  assert.equal(fs.existsSync(lockDir), true);
+  await rmdirAsync();
+  assert.equal(fs.existsSync(lockDir), false, "lock dir released on remote");
+  // second acquire must succeed (no stale lock)
+  await mkdirAsync();
+  assert.equal(fs.existsSync(lockDir), true);
+  // cleanup via fs.rmSync on a dir
+  fs.rmSync(lockDir);
+  assert.equal(fs.existsSync(lockDir), false);
+});
+
+test("fs.rmSync recursive on a remote dir tree uses rm -rf and removes children", () => {
+  fs.mkdirSync("/root/tree", { recursive: true });
+  fs.writeFileSync("/root/tree/a.txt", "a");
+  fs.writeFileSync("/root/tree/b.txt", "b");
+  assert.equal(fs.existsSync("/root/tree/a.txt"), true);
+  fs.rmSync("/root/tree", { recursive: true });
+  assert.equal(fs.existsSync("/root/tree"), false);
+  assert.equal(fs.existsSync("/root/tree/a.txt"), false);
+});

@@ -109,6 +109,18 @@ function create(initial) {
     if ((m = cmd.match(/^uname -r$/))) {
       return { stdout: Buffer.from("6.5.0-14-generic\n"), stderr: Buffer.alloc(0), exitCode: 0 };
     }
+    if ((m = cmd.match(/^mkdir -p (.*)$/))) {
+      const p = unquote(m[1].trim());
+      if (!files.has(p)) files.set(p, { type: "dir", content: Buffer.alloc(0), mtimeMs: Date.now() });
+      return { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), exitCode: 0 };
+    }
+    if ((m = cmd.match(/^rm -rf (.*)$/))) {
+      const target = unquote(m[1].trim());
+      for (const k of [...files.keys()]) {
+        if (k === target || k.startsWith(target + "/")) files.delete(k);
+      }
+      return { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), exitCode: 0 };
+    }
     if ((m = cmd.match(/^cat (.*) 2>\/dev\/null \|\| true$/))) {
       const e = files.get(m[1].trim());
       return { stdout: e ? e.content : Buffer.alloc(0), stderr: Buffer.alloc(0), exitCode: 0 };
@@ -130,6 +142,13 @@ function create(initial) {
   }
   function expandEnv(s) {
     return s.replace(/\$HOME/g, "/root");
+  }
+  // Strip a single layer of double-quote shell quoting (JSON.stringify-style), so a
+  // command like `mkdir -p "/root/tree"` stores the path as /root/tree, matching what
+  // a real remote shell would pass to mkdir after removing the quotes.
+  function unquote(s) {
+    if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) return s.slice(1, -1);
+    return s;
   }
 
   function sftpExec(command) { return runExec(command); }
