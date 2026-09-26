@@ -119,3 +119,20 @@ test("fs.rmSync recursive on a remote dir tree uses rm -rf and removes children"
   assert.equal(fs.existsSync("/root/tree"), false);
   assert.equal(fs.existsSync("/root/tree/a.txt"), false);
 });
+
+test("copyFileSync remote→local (createBackup path): path.dirname + mkdir + write succeed", () => {
+  // Regression: ctx lacked `path`, so `path.dirname(d)` in the sRem && !dRem branch threw
+  // "Cannot read properties of undefined (reading 'dirname')". qoder's Edit createBackup
+  // calls fs.copyFile (promises) → fs.copyFileSync; the error was silently caught and the
+  // tool fell back to sed. Source is remote, backup destination is local (drive-qualified),
+  // so this branch does path.dirname(d) + native mkdirSync + native writeFileSync.
+  fs.writeFileSync("/root/editme.txt", "remote-body");
+  const dir = path.join(os.tmpdir(), "as-cpback-" + Math.random().toString(36).slice(2));
+  const d = path.join(dir, "editme.txt.bak");
+  try {
+    fs.copyFileSync("/root/editme.txt", d); // must not throw
+    assert.equal(fs.readFileSync(d, "utf8"), "remote-body");
+  } finally {
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) {}
+  }
+});
