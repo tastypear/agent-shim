@@ -32,7 +32,7 @@ function create(initial) {
       mode: entry.type === "dir" ? 0o040755 : 0o100644,
       isFile: entry.type === "file",
       isDirectory: entry.type === "dir",
-      isSymbolicLink: false,
+      isSymbolicLink: entry.type === "link",
       mtimeMs: entry.mtimeMs, ctimeMs: entry.mtimeMs, atimeMs: entry.mtimeMs,
       uid: 0, gid: 0, dev: 0, ino: 0, nlink: 1, rdev: 0, blksize: 4096, blocks: 0,
     };
@@ -120,6 +120,16 @@ function create(initial) {
         if (k === target || k.startsWith(target + "/")) files.delete(k);
       }
       return { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), exitCode: 0 };
+    }
+    if ((m = cmd.match(/^readlink (.*)$/))) {
+      // Plain readlink (NOT -f): returns the link target, exits non-zero for non-symlinks
+      // and missing paths — matching real `readlink` behavior the readlinkSync patch relies on.
+      const p = unquote(m[1].trim());
+      const e = files.get(p);
+      if (e && e.type === "link") {
+        return { stdout: Buffer.from(e.target + "\n"), stderr: Buffer.alloc(0), exitCode: 0 };
+      }
+      return { stdout: Buffer.alloc(0), stderr: Buffer.from("readlink: " + p + ": Not a directory\n"), exitCode: 1 };
     }
     if ((m = cmd.match(/^cat (.*) 2>\/dev\/null \|\| true$/))) {
       const e = files.get(m[1].trim());
