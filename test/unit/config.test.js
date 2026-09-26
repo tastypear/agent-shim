@@ -45,6 +45,22 @@ test("validate: accepts a well-formed config without throwing", () => {
   );
 });
 
+test("validate: paths.nodeVersion is an accepted string key", () => {
+  assert.doesNotThrow(() =>
+    validate({
+      ssh: { host: "h", user: "u", port: 22, keyPath: "~/.ssh/id" },
+      paths: { vcwd: "/root", ssh2: "./node_modules/ssh2", nodeVersion: "v20.19.2" },
+    }, "test")
+  );
+  // bare version (no leading v) is also accepted as a string
+  assert.doesNotThrow(() =>
+    validate({
+      ssh: { host: "h", user: "u", port: 22, keyPath: "~/.ssh/id" },
+      paths: { vcwd: "/root", ssh2: "./node_modules/ssh2", nodeVersion: "20.19.2" },
+    }, "test")
+  );
+});
+
 test("validate: type mismatch throws", () => {
   assert.throws(() => validate({ ssh: { port: "notanumber" } }, "test"), /must be int/);
   assert.throws(() => validate({ ssh: "notobject" }, "test"), /must be an object/);
