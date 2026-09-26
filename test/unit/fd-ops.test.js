@@ -53,6 +53,27 @@ test("ftruncateSync on a virtual fd does not throw and truncates pending writes"
   assert.equal(fs.readFileSync(p).toString(), "hello");
 });
 
+test("fchmodSync on a virtual fd stores mode and applies it on close (graceful-fs pattern)", () => {
+  const p = "/root/secret.json";
+  // graceful-fs does: openSync -> fchmodSync(fd, mode) -> closeSync, with no write in between.
+  const fd = fs.openSync(p, "w");
+  fs.fchmodSync(fd, 0o600); // must not throw EBADF on the virtual fd
+  fs.writeFileSync(fd, '{"k":"v"}');
+  fs.closeSync(fd);
+  // mode applied after the content flush landed on the remote
+  assert.equal(fs.readFileSync(p).toString(), '{"k":"v"}');
+});
+
+test("fchownSync/futimesSync on a virtual fd are no-ops (no EBADF)", () => {
+  const p = "/root/owned.txt";
+  const fd = fs.openSync(p, "w");
+  fs.writeFileSync(fd, "x");
+  fs.fchownSync(fd, 1000, 1000); // must not throw
+  fs.futimesSync(fd, new Date(), new Date()); // must not throw
+  fs.closeSync(fd);
+  assert.equal(fs.readFileSync(p).toString(), "x");
+});
+
 test("fd-based ops pass through to native for real local fds (no EBADF)", () => {
   const tmp = path.join(os.tmpdir(), "as-real-fd-" + Math.random().toString(36).slice(2) + ".txt");
   const fd = fs.openSync(tmp, "w"); // real native fd (local path)
