@@ -61,6 +61,17 @@ test("validate: paths.nodeVersion is an accepted string key", () => {
   );
 });
 
+test("validate: paths.arch is an accepted string key", () => {
+  for (const a of ["x64", "arm64", "arm", "ia32", "ppc64", "s390x"]) {
+    assert.doesNotThrow(() =>
+      validate({
+        ssh: { host: "h", user: "u", port: 22, keyPath: "~/.ssh/id" },
+        paths: { vcwd: "/root", ssh2: "./node_modules/ssh2", arch: a },
+      }, "test")
+    );
+  }
+});
+
 test("validate: type mismatch throws", () => {
   assert.throws(() => validate({ ssh: { port: "notanumber" } }, "test"), /must be int/);
   assert.throws(() => validate({ ssh: "notobject" }, "test"), /must be an object/);
