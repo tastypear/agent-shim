@@ -57,6 +57,19 @@ An adapter module exports `{ detectRole, create }`:
   probes `uname -r` so the agent's `OS Version:` prompt is self-consistent with
   `platform=linux`. `false` leaves the real `os.release()` alone.
 
+### Telemetry suppression
+
+- `getTelemetryBlockPaths(): string[]` — URL paths whose outbound `http.request`/
+  `https.request` calls should be short-circuited with a synthetic empty 200 response
+  (no socket opened). Used to silence an agent's telemetry/OTLP exporter at the network
+  layer without touching login/auth/chat traffic. The block is **path-level, not
+  host-level**: only the exact paths returned here are intercepted, so traffic to the
+  same host on different paths (e.g. `/api/v1/userinfo`) flows through untouched. The
+  mechanism lives in core (`lib/core/net-block.js`) and is agent-agnostic; the path list
+  is the only agent-specific input. Returns `[]` (or omit the method) to opt out. Active
+  by default (`config.disableTelemetry` defaults to `true`; set `false` to allow
+  telemetry through).
+
 ### Diagnostics
 
 - `getExitCheckPath(): string | null` — where to write an exit-check sentinel file (or
@@ -99,6 +112,7 @@ function create(cfg) {
     getSwallowEnoentPatterns: () => [],
     needsOsReleaseFake: () => true,
     getExitCheckPath: () => null,
+    getTelemetryBlockPaths: () => ["/v1/traces", "/v1/logs", "/v1/metrics"],
   };
 }
 
