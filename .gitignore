@@ -10,6 +10,9 @@ node_modules/
 .remote-bridge.json
 .remote-bridge-*.json
 
+# Private debugging notes (may contain cookies / auth material)
+qoder_remote-control_problems.txt
+
 # Per-connection probe cache
 .agent-shim-cache-*.json
 .remote-bridge-cache.json

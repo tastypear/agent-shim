@@ -19,5 +19,6 @@
   },
   "env": {},
   "keepalive": 5000,
-  "readyTimeout": 15000
+  "readyTimeout": 15000,
+  "byok": false
 }
