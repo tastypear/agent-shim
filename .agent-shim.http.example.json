@@ -1,0 +1,17 @@
+{
+  "transport": "http",
+  "http": {
+    "host": "127.0.0.1",
+    "port": 8765,
+    "token": "your-remote-ops-token",
+    "tls": false
+  },
+  "paths": {
+    "vcwd": "/root",
+    "osRelease": "6.5.0-14-generic"
+  },
+  "env": {},
+  "keepalive": 5000,
+  "readyTimeout": 15000,
+  "byok": false
+}
