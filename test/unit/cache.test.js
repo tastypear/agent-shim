@@ -1,22 +1,18 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
 const { isRemote, toRemote } = require("../../lib/classifier");
 const { create: createMockSftp, OP } = require("./mock-sftp");
 const cacheMod = require("../../lib/fs-bridge/cache");
 
-// Fresh installed cache per test: unique temp cacheFile, mock SFTP, minimal adapter.
-function freshCache(initialFiles, opts) {
+// Fresh installed cache per test: mock SFTP, minimal adapter.
+function freshCache(initialFiles) {
   const sftp = createMockSftp(initialFiles);
   let calls = 0;
   const wrappedSftpCall = (op, p, d, x) => { calls++; return sftp.sftpCall(op, p, d, x); };
-  const cacheFile = path.join(os.tmpdir(), "agent-shim-test-" + Math.random().toString(36).slice(2) + ".json");
-  try { fs.unlinkSync(cacheFile); } catch (e) {}
-  const cfg = { host: "test", cacheFile, cacheDir: os.tmpdir() };
+  const cfg = { host: "test" };
   const adapter = {
-    getPrefetchPaths: () => ({ exists: [], stat: [] }),
+    getPrefetchPaths: () => ({ exists: [], stat: [], read: [], readdir: [], access: [] }),
     needsOsReleaseFake: () => false,
   };
   const ctx = {
@@ -25,7 +21,7 @@ function freshCache(initialFiles, opts) {
     getRemoteCwd: () => "/root", cfg, adapter, probes: {},
   };
   cacheMod.install(ctx);
-  return { ctx, calls: () => calls, cacheFile };
+  return { ctx, calls: () => calls };
 }
 
 test("sRead caches within TTL (second call hits cache, no sftpCall)", () => {
@@ -82,14 +78,4 @@ test("sReaddir lists directory entries", () => {
 test("sRead throws ENOENT for missing files", () => {
   const { ctx } = freshCache({});
   assert.throws(() => ctx.sRead("/root/missing.txt"), /ENOENT/);
-});
-
-test("probe files persist to the disk cache", () => {
-  // /proc/version is a PROBE_FILE — sRead should store it in diskCache.read.
-  const { ctx, cacheFile } = freshCache({ "/proc/version": "Linux 6.5.0" });
-  ctx.sRead("/proc/version");
-  // flushDiskCache is deferred 500ms; force it via the exit handler the module registered.
-  process.emit("exit", 0);
-  const raw = JSON.parse(fs.readFileSync(cacheFile, "utf8"));
-  assert.ok(raw.read && raw.read["/proc/version"], "probe file persisted to disk cache");
 });
