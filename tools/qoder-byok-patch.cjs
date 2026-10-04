@@ -1,6 +1,7 @@
-// qoder-byok-patch.cjs — invasive bundle patcher for qodercli 1.1.64.
-// Applies the shared BYOK patches (lib/byok-patches.cjs) directly to the bundle file on disk.
-// For the non-invasive alternative (in-memory via ESM load hook), see lib/byok-hook.mjs.
+// qoder-byok-patch.cjs — invasive bundle patcher for qodercli 1.1.64–1.1.65.
+// Applies the qoder patches (lib/qoder-patches.cjs + lib/qoder-remote-patches.cjs) directly to
+// the bundle file on disk. For the non-invasive alternative (in-memory via ESM load hook), see
+// lib/qoder-hook.mjs.
 //
 // Usage: node qoder-byok-patch.cjs [--check|--restore|--apply] [bundle.js]
 // Default bundle: the live qodercli.js in the npm install.
@@ -9,7 +10,10 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { PATCHES, applyPatches } = require("../lib/byok-patches.cjs");
+const general = require("../lib/qoder-patches.cjs");
+const remote = require("../lib/qoder-remote-patches.cjs");
+const { applyPatches } = general;
+const PATCHES = [...general.PATCHES, ...remote.PATCHES];
 
 function defaultBundle() {
   const base = path.join(os.homedir(), "AppData", "Roaming", "npm", "node_modules", "@qoder-ai", "qodercli", "bundle", "qodercli.js");
@@ -40,7 +44,7 @@ function main() {
   }
 
   const src = readBundle(bundle);
-  const { out, report } = applyPatches(src);
+  const { out, report } = applyPatches(src, PATCHES);
 
   for (const r of report) console.log(("  " + r.status + " ").padEnd(22) + r.name);
 
