@@ -29,8 +29,8 @@
     "README.md"
   ],
   "dependencies": {
-    "remote-cp-node": "github:tastypear/remote-cp-node",
-    "remote-fs-node": "github:tastypear/remote-fs-node",
+    "remote-cp-node": "^1.0.1",
+    "remote-fs-node": "^1.0.2",
     "socks": "^2.8.10",
     "ssh2": "^1.17.0"
   }
