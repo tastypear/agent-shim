@@ -30,7 +30,7 @@
   ],
   "dependencies": {
     "remote-cp-node": "^1.0.1",
-    "remote-fs-node": "^1.0.2",
+    "remote-fs-node": "^1.0.3",
     "socks": "^2.8.10",
     "ssh2": "^1.17.0"
   }
