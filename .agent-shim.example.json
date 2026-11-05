@@ -18,6 +18,9 @@
     "cliHome": ""
   },
   "env": {},
+  "exec": {
+    "localPatterns": []
+  },
   "keepalive": 5000,
   "readyTimeout": 15000
 }
