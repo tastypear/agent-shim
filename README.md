@@ -44,6 +44,9 @@ qoder
 }
 ```
 
+Password auth: set `ssh.password` (or the `REMOTE_BRIDGE_SSH_PASSWORD` env var) and omit
+`keyPath`. With both set, ssh2 tries publickey first, then password / keyboard-interactive.
+
 ## Transport modes
 
 | Mode | Config | Description |
@@ -57,6 +60,7 @@ qoder
 |---|---|
 | `AGENT_SHIM_CONFIG` | Path to config file |
 | `REMOTE_BRIDGE_SOCKS_PROXY` | SOCKS5 proxy (`host:port`) |
+| `REMOTE_BRIDGE_SSH_PASSWORD` | SSH password auth (overrides `ssh.password`) |
 | `AGENT_SHIM_DEBUG` | Enable general debug capture (uncaught exceptions, stderr monitoring) |
 | `AGENT_SHIM_DEBUG_HTTP` | Capture all HTTP wire-level events and exec-cache lookups to a file (`1` = default path, or a custom path) |
 | `AGENT_SHIM_CACHE_DEBUG` | Enable cache prefetch debug logging |
