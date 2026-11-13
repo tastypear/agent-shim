@@ -134,3 +134,43 @@ test("routeExecCommand: bash -c form routes remote", () => {
   const r = routeExecCommand(null, "bash", ["-c", "uname -a"], {}, mockAdapter, getRemoteCwd);
   assert.equal(r, "cd '/root' && uname -a");
 });
+
+// ─── qoder 1.1.87 wrapper shapes (LOCAL-fallback regression, 2026-11-14) ───
+// qoder wraps every Bash call as bash -c "{ source '<snapshot.sh>' ...; } && ... &&
+// eval <Q> && pwd -P >| '<cwdfile>'". shell-quote's Dyi() DOUBLE-quotes the eval arg
+// when the user command contains a single quote (e.g. `tr '\0' ' ' < /proc/1/cmdline`),
+// producing `eval "<cmd>"` — the old `includes("eval '")` guard missed it, the snapshot
+// prefix matched isHostInternalCmd, and the whole wrapped command ran on the LOCAL
+// Windows bash. These cases use the REAL adapter, not the minimal mock above.
+const { create } = require("../../lib/adapters/qoder");
+const realAdapter = create({});
+
+const SNAP = "C:/Users/tastypear/.qoder/shell-snapshots/snapshot-bash-1794584208288-hqfw2g.sh";
+const qoderWrap = (evalPart) =>
+  `{ source '${SNAP}' 2>/dev/null || true; } && { shopt -u extglob 2>/dev/null || true; } && ${evalPart} && pwd -P >| 'cwd'`;
+
+test("real isHostInternalCmd: qoder-wrapped user commands are never host-internal", () => {
+  assert.equal(realAdapter.isHostInternalCmd(qoderWrap("eval 'uname -s' < /dev/null")), false);
+  assert.equal(
+    realAdapter.isHostInternalCmd(qoderWrap('eval "tr \'\\0\' \' \' < /proc/1/cmdline | head -c 80"')),
+    false,
+    "double-quoted eval wrapper (single quote + < redirect in user cmd)"
+  );
+});
+
+test("real isHostInternalCmd: qoder-internal commands stay local", () => {
+  assert.equal(realAdapter.isHostInternalCmd(`{ source '${SNAP}' 2>/dev/null || true; } && { shopt -u extglob 2>/dev/null || true; } &`), true);
+  assert.equal(realAdapter.isHostInternalCmd(`SNAPSHOT_FILE='${SNAP}'\n      builtin printf '\n__QODER_SNAPSHOT_PHASE_x__:shell_ready\n'`), true);
+  assert.equal(realAdapter.isHostInternalCmd("sh 'C:/x/security-resources/security-scan/bin/qodersec-launch.sh' ensure-deps"), true);
+});
+
+test("wrapSpawn: qoder double-quoted eval wrapper with < redirect routes remote", () => {
+  const cmd = qoderWrap('eval "tr \'\\0\' \' \' < /proc/1/cmdline | head -c 80"');
+  const r = wrapSpawn("bash", ["-c", cmd], {}, realAdapter, getRemoteCwd);
+  assert.equal(r.exe, "__sftp_exec__");
+  assert.equal(r.args[0], "cd '/root' && tr '\\0' ' ' < /proc/1/cmdline | head -c 80");
+});
+
+test("extractEval: double-quoted eval argument", () => {
+  assert.equal(extractEval('preamble && eval "tr \'\\0\' \' \' < /proc/1/cmdline" && pwd'), "tr '\\0' ' ' < /proc/1/cmdline");
+});
