@@ -1,0 +1,6 @@
+# Runtime artifacts (never commit)
+.cache/
+.run/
+__pycache__/
+*.pyc
+*.log

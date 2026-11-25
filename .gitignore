@@ -7,6 +7,7 @@ node_modules/
 # Private configs (host/user/keyPath — keep example + default in tree)
 .agent-shim.json
 .agent-shim-*.json
+!codex-remote/config.example.json
 .remote-bridge.json
 .remote-bridge-*.json
 

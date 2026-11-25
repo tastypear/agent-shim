@@ -1,0 +1,33 @@
+{
+  "transport": "ssh",
+  "name": "myremote",
+  "ssh": { "host": "my-host.example.com", "user": "root", "port": 22, "keyPath": "~/.ssh/id_ed25519" },
+  "paths": {
+    "vcwd": "/root",
+    "remoteHome": "/root",
+    "socksProxy": ""
+  },
+  "codex": {
+    "exe": "C:\\Users\\<you>\\AppData\\Roaming\\npm\\node_modules\\@openai\\codex\\node_modules\\@openai\\codex-win32-x64\\vendor\\x86_64-pc-windows-msvc\\bin\\codex.exe",
+    "execServerVersion": "0.171.0",
+    "localHome": "C:\\Users\\<you>"
+  },
+  "ports": {
+    "appServer": 19100,
+    "proxyCwd": 19101,
+    "proxyRoute": 19102,
+    "tunnel": 19103,
+    "winExecServer": 19200,
+    "remoteExecServer": 19104
+  },
+  "exec": {
+    "localMatch": ["herdr "],
+    "localWhitelist": [],
+    "remoteOverride": [],
+    "localPath": "C:\\Program Files\\Git\\bin"
+  },
+  "sync": { "enabled": true, "whitelist": ["skills"] },
+  "yolo": true,
+  "keepalive": 5000,
+  "readyTimeout": 15000
+}
