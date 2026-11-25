@@ -93,13 +93,11 @@ def main():
     rc_common.ensure_local_services(cfg)
     ensure_proxy(cfg)
 
-    # Inside herdr the pane id is stable and unique; outside it there is no
-    # natural identity, so give each launch a unique id. Otherwise two windows
-    # would share the same token/envId/registry entry (clobbering each other's
-    # tuiPid and breaking tunnel lifetime).
-    pane = os.environ.get("HERDR_PANE_ID")
-    if not pane:
-        pane = "local-" + uuid.uuid4().hex[:8]
+    # Every launch gets a unique suffix so envId/token/registry entry never
+    # collide. herdr pane ids are only unique within one herdr server/session,
+    # and plain terminal windows have none at all, so we always append one.
+    base = os.environ.get("HERDR_PANE_ID") or "local"
+    pane = "%s-%s" % (base, uuid.uuid4().hex[:8])
     env_id = rc_common.make_env_id(cfg, pane)
     token = rc_common.make_token(cfg, pane)
     remote_cwd = cfg["paths"].get("vcwd") or cfg["paths"]["remoteHome"] or "/root"

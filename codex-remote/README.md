@@ -65,10 +65,11 @@ app-server environments so they stop reconnecting. The next launch restarts
 the tunnel automatically. A config whose registry has no recorded pid is left
 alone (treated as "unknown", never reaped).
 
-Outside herdr there is no natural pane id, so each launch gets a unique id
-(`local-<rand>`): multiple plain terminal windows of the same config stay
-independent (distinct envId/token/registry entry), and the tunnel is only
-closed once all of their TUIs have exited.
+Every launch appends a unique suffix to its pane id (`<pane|local>-<rand>`),
+because herdr pane ids are only unique within one herdr server and plain
+terminal windows have none. So envId/token/registry entries never collide
+across windows or restarts, and the tunnel is closed only once all of a
+config's TUIs have exited.
 
 ## Stop
 
