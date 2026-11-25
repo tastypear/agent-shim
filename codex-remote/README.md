@@ -19,15 +19,26 @@ local Windows                                  remote Linux (via SSH)
                                             └── SSH tunnel (direct-tcpip)
 ```
 
-Processes are shared and long-lived: `1 app-server + 1 proxy + 1 Windows
-exec-server + 1 tunnel`, independent of how many panes you open. Each pane adds
-one TUI and one registry entry.
+Processes are shared and long-lived, and **not** per pane:
+
+- **global** (one each, shared by every connection config): `app-server`, the
+  Windows `exec-server`, and the `proxy` (its two listen ports). The first
+  launch fixes their ports in `.run/global.json`; later configs reuse them.
+- **per remote config**: one SSH `tunnel` (the proxy dials this env's tunnel,
+  chosen from the pane's registry `tunnelUrl`).
+- **per remote host**: one `exec-server` (runs on that host, not local).
+- **per pane**: one TUI plus one registry entry.
+
+So the local process count is `3 (global) + (number of remote configs)`,
+independent of how many panes you open.
 
 ## Quick start
 
 1. Copy `config.example.json` to `../.agent-shim-codex-<name>-ssh.json` and fill
-   in `ssh`, `codex.exe`, `codex.localHome`, and (optionally) a different
-   `ports` block per remote so several remotes can run side by side.
+   in `ssh`, `codex.exe`, `codex.localHome`. For several remotes at once, give
+   each config a distinct `tunnel` and `remoteExecServer`; `appServer`,
+   `winExecServer`, `proxyCwd` and `proxyRoute` are global and shared (the
+   first launch's values are stored in `.run/global.json`).
 2. Launch from any terminal (PowerShell shown):
 
    ```powershell
@@ -41,6 +52,17 @@ The launcher is idempotent: it starts the shared services if absent, installs
 or reuses the remote `exec-server` (arch-aware: x86_64 / aarch64, content
 addressed by sha256), syncs `~/.codex/skills`, registers this pane, then starts
 the TUI against the proxy with a per-pane bearer token.
+
+## Stop
+
+```
+codex-remote-stop.cmd            # this config's tunnel only
+codex-remote-stop.cmd --shared   # also stop the GLOBAL app-server / Windows exec-server / proxy
+```
+
+The global app-server, Windows exec-server and proxy are shared by every
+config, so `--shared` affects all of them. The remote exec-server keeps
+running on the remote host.
 
 ## Files
 

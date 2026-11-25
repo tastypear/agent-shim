@@ -105,6 +105,7 @@ def main():
     entry = {
         "token": token, "envId": env_id, "pane": pane,
         "configName": cfg["_name"],
+        "tunnelUrl": "ws://127.0.0.1:%d" % cfg["ports"]["tunnel"],
         "remoteCwd": cfg["paths"].get("vcwd") or "/root",
         "remoteHome": cfg["paths"].get("remoteHome") or "/root",
         "localHome": local_home, "winCwd": local_home,

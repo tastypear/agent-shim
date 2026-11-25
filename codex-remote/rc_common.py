@@ -23,6 +23,7 @@ PROJECT = os.path.dirname(HERE)          # D:\program\agent-shim
 CACHE = os.path.join(HERE, ".cache")
 RUN = os.path.join(HERE, ".run")
 REGISTRY = os.path.join(RUN, "registry")
+GLOBAL_FILE = os.path.join(RUN, "global.json")
 
 DEFAULTS = {
     "name": "wsl",
@@ -50,6 +51,32 @@ def log(msg):
     print("[%s] %s" % (stamp, msg), flush=True)
 
 
+GLOBAL_KEYS = ("appServer", "winExecServer", "proxyCwd", "proxyRoute")
+
+
+def global_ports(want):
+    """The app-server, the Windows exec-server and the shared proxy are global
+    singletons shared by every connection config. The first launch picks their
+    ports (persisted in .run/global.json); later configs reuse them, so the
+    local process count stays constant regardless of configs/panes."""
+    os.makedirs(RUN, exist_ok=True)
+    try:
+        got = {}
+        if os.path.isfile(GLOBAL_FILE):
+            with open(GLOBAL_FILE, "r", encoding="utf-8") as f:
+                got = json.load(f)
+        merged = {k: int(got.get(k, want[k])) for k in GLOBAL_KEYS}
+        if merged != got:
+            tmp = GLOBAL_FILE + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(merged, f)
+            os.replace(tmp, GLOBAL_FILE)
+        return merged
+    except Exception as e:
+        log("global ports coordination failed (%s); using %s" % (e, want))
+        return {k: want[k] for k in GLOBAL_KEYS}
+
+
 def load_config(path):
     if not os.path.isfile(path):
         raise SystemExit("config not found: %s" % path)
@@ -70,6 +97,13 @@ def load_config(path):
     merged["_path"] = path
     base = os.path.splitext(os.path.basename(path))[0]
     merged["_name"] = merged.get("name") or base.lstrip(".").replace(".agent-shim-codex-", "").replace("-ssh", "")
+    want = {k: int(merged["ports"][k]) for k in GLOBAL_KEYS}
+    g = global_ports(want)
+    if want != g:
+        log("global ports are %s (config %s said %s); using global"
+            % (g, merged["_name"], want))
+    for k in GLOBAL_KEYS:
+        merged["ports"][k] = g[k]
     return merged
 
 

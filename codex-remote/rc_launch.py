@@ -104,6 +104,7 @@ def main():
         "envId": env_id,
         "pane": pane,
         "configName": cfg["_name"],
+        "tunnelUrl": "ws://127.0.0.1:%d" % cfg["ports"]["tunnel"],
         "remoteCwd": remote_cwd,
         "remoteHome": cfg["paths"]["remoteHome"] or "/root",
         "localHome": local_home,

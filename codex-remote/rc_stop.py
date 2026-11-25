@@ -41,16 +41,24 @@ def proc_name(pid):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True)
+    ap.add_argument("--shared", action="store_true",
+                    help="also stop the GLOBAL app-server / Windows exec-server / "
+                         "shared proxy (shared by every config)")
     args = ap.parse_args()
     cfg = rc_common.load_config(args.config)
     ports = cfg["ports"]
+    # Per-config service: this config's SSH tunnel only (the proxy is global).
     targets = [
-        ("app-server", ports["appServer"]),
-        ("proxy", ports["proxyCwd"]),
-        ("proxy", ports["proxyRoute"]),
         ("remote-svc/tunnel", ports["tunnel"]),
-        ("windows-exec-server", ports["winExecServer"]),
     ]
+    if args.shared:
+        # Global singletons: stopping them affects ALL connection configs.
+        targets += [
+            ("app-server(global)", ports["appServer"]),
+            ("windows-exec-server(global)", ports["winExecServer"]),
+            ("proxy(global)", ports["proxyCwd"]),
+            ("proxy(global)", ports["proxyRoute"]),
+        ]
     killed = set()
     for label, port in targets:
         for pid in port_pids(port):
@@ -65,6 +73,11 @@ def main():
             rc_common.log("stopped %s on port %d (pid %d, %s)" % (label, port, pid, name))
     if not killed:
         rc_common.log("no running services found for %s" % args.config)
+    if not args.shared:
+        rc_common.log("note: global app-server %d, Windows exec-server %d and proxy %d/%d "
+                      "are left running; pass --shared to stop them too"
+                      % (ports["appServer"], ports["winExecServer"],
+                         ports["proxyCwd"], ports["proxyRoute"]))
     rc_common.log("note: the remote exec-server keeps running on the remote host")
 
 

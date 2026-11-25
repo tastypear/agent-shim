@@ -477,7 +477,10 @@ async def route_role_handler(ws, path=None):
     else:
         log("[route] app-server connected with unknown env path=%s" % path)
 
-    remote = Conn(REMOTE, "remote")
+    # One global proxy serves every config; pick this env's remote tunnel from
+    # its registry entry (fallback to the proxy's own CP_REMOTE).
+    remote_uri = (cfg or {}).get("tunnelUrl") or REMOTE
+    remote = Conn(remote_uri, "remote")
     win = Conn(WINDOW, "win")
     remote_task = asyncio.create_task(remote.reader(ws, own_handshake=False))
     win_task = asyncio.create_task(win.reader(ws, own_handshake=True))

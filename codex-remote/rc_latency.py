@@ -68,6 +68,20 @@ def main():
     ports = cfg["ports"]
 
     env_id = rc_common.make_env_id(cfg, args.pane)
+    # Register this env so the shared proxy routes it to THIS config's tunnel.
+    local_home = cfg["codex"].get("localHome") or os.path.expanduser("~")
+    rc_common.write_registry({
+        "token": "latency-" + env_id, "envId": env_id, "pane": args.pane,
+        "configName": cfg["_name"],
+        "tunnelUrl": "ws://127.0.0.1:%d" % ports["tunnel"],
+        "remoteCwd": cfg["paths"].get("vcwd") or "/root",
+        "remoteHome": cfg["paths"].get("remoteHome") or "/root",
+        "localHome": local_home, "winCwd": local_home,
+        "winPath": cfg["exec"].get("localPath") or os.environ.get("PATH", ""),
+        "bashExe": rc_common.resolve_bash(cfg),
+        "herdr": {}, "localMatch": cfg["exec"].get("localMatch") or ["herdr "],
+        "localWhitelist": [], "remoteOverride": [], "yolo": True,
+    })
     argv = ["bash", "-lc", "free -h | head -2"]
 
     print("== direct to SSH tunnel (raw exec-server, no proxy) ==")
