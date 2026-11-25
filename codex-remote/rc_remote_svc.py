@@ -18,6 +18,7 @@ def main():
 
     cfg = rc_common.load_config(args.config)
     port = cfg["ports"]["tunnel"]
+    name = cfg["_name"]
 
     if rc_common.port_open(port):
         rc_common.log("remote svc: tunnel port %d already listening; exiting" % port)
@@ -30,12 +31,28 @@ def main():
             rdir = rc_common.install_remote_exec_server(cfg, client)
             rc_common.start_remote_exec_server(cfg, client, rdir)
             listener, stop = rc_common.open_tunnel(cfg, client, port)
+            # Grace period: a launcher starts this service just before it
+            # records the new pane's tuiPid, so do not reap on the very first
+            # ticks. Only after this window do we trust a "dead" reading.
+            started = time.time()
             while True:
                 try:
                     client.get_transport().send_ignore()
                 except Exception as e:
                     rc_common.log("remote svc: ssh transport dropped: %s; reconnecting" % e)
                     break
+                # Drop the tunnel once no TUI for this config is alive (only
+                # when we have positively observed all recorded TUIs dead; a
+                # config with no recorded pid is left alone).
+                if time.time() - started > 10 and rc_common.config_pane_state().get(name) == "dead":
+                    rc_common.log("remote svc: no live TUI for %s; closing tunnel" % name)
+                    stop.set()
+                    try:
+                        listener.close()
+                    except Exception:
+                        pass
+                    client.close()
+                    return 0
                 time.sleep(2)
             stop.set()
             try:

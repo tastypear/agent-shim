@@ -126,8 +126,12 @@ def main():
     url = "ws://127.0.0.1:%d" % cfg["ports"]["proxyCwd"]
     argv = [exe, "--remote", url, "--remote-auth-token-env", token_env] + list(args.rest)
     rc_common.log("launching TUI: %s" % " ".join(argv))
-    proc = subprocess.run(argv, env=env)
-    return proc.returncode
+    proc = subprocess.Popen(argv, env=env)
+    # Record the TUI pid so the remote service can drop the SSH tunnel once
+    # this pane's TUI exits.
+    entry["tuiPid"] = proc.pid
+    rc_common.write_registry(entry)
+    return proc.wait()
 
 
 if __name__ == "__main__":

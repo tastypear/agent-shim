@@ -53,6 +53,16 @@ or reuses the remote `exec-server` (arch-aware: x86_64 / aarch64, content
 addressed by sha256), syncs `~/.codex/skills`, registers this pane, then starts
 the TUI against the proxy with a per-pane bearer token.
 
+## Tunnel lifetime
+
+The launcher records each pane's TUI pid in the registry. The per-config
+tunnel service checks every ~2s; once it has positively observed that **all**
+recorded TUIs for that config are dead (after a short startup grace), it
+closes the SSH tunnel and exits. The proxy then closes the now-orphaned
+app-server environments so they stop reconnecting. The next launch restarts
+the tunnel automatically. A config whose registry has no recorded pid is left
+alone (treated as "unknown", never reaped).
+
 ## Stop
 
 ```

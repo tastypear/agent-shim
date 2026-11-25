@@ -590,6 +590,50 @@ def make_token(cfg, pane_id):
     return hashlib.sha256(seed.encode("utf-8")).hexdigest()[:32]
 
 
+def pid_alive(pid):
+    """True if a process with this PID is alive (Windows)."""
+    if not pid:
+        return False
+    try:
+        out = subprocess.check_output(
+            ["tasklist", "/FI", "PID eq %d" % int(pid), "/FO", "CSV", "/NH"],
+            text=True, stderr=subprocess.DEVNULL,
+        )
+        return ("\"%d\"" % int(pid)) in out
+    except Exception:
+        return True  # unknown -> assume alive (don't tear down on probe failure)
+
+
+def config_pane_state():
+    """configName -> 'alive' | 'dead' | 'unknown'.
+
+    'dead' means we recorded tuiPids for this config and none are alive, so it
+    is safe to drop its SSH tunnel. 'unknown' means no tuiPid was ever recorded
+    (legacy/test entries); we do NOT reap on unknown, to protect live sessions.
+    """
+    reg = load_registry()
+    seen = {}
+    for e in reg.values():
+        name = e.get("configName")
+        if not name:
+            continue
+        st = seen.setdefault(name, {"recorded": False, "alive": False})
+        pid = e.get("tuiPid")
+        if pid:
+            st["recorded"] = True
+            if pid_alive(pid):
+                st["alive"] = True
+    out = {}
+    for name, st in seen.items():
+        if st["alive"]:
+            out[name] = "alive"
+        elif st["recorded"]:
+            out[name] = "dead"
+        else:
+            out[name] = "unknown"
+    return out
+
+
 # ---------------------------------------------------------------------------
 # skills sync
 # ---------------------------------------------------------------------------

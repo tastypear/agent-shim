@@ -77,6 +77,23 @@ def cfg_for_env_id(reg, env_id):
     return None
 
 
+_live_cache = {"at": 0.0, "val": {}}
+
+
+def config_pane_state():
+    """configName -> 'alive' | 'dead' | 'unknown', cached ~2s."""
+    now = time.monotonic()
+    if now - _live_cache["at"] < 2.0:
+        return _live_cache["val"]
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import rc_common
+
+    val = rc_common.config_pane_state()
+    _live_cache["at"] = now
+    _live_cache["val"] = val
+    return val
+
+
 # ---------------------------------------------------------------------------
 # Path normalization
 # ---------------------------------------------------------------------------
@@ -485,6 +502,37 @@ async def route_role_handler(ws, path=None):
     remote_task = asyncio.create_task(remote.reader(ws, own_handshake=False))
     win_task = asyncio.create_task(win.reader(ws, own_handshake=True))
 
+    # When this config has no live TUI and the tunnel is gone, stop retrying and
+    # close this app-server environment so stale envs do not churn forever.
+    remote_name = (cfg or {}).get("configName")
+
+    async def reaper():
+        # Require two consecutive "dead" observations so a transient probe
+        # failure or a tunnel reconnect for a just-started pane is not fatal.
+        dead_streak = 0
+        while True:
+            await asyncio.sleep(2)
+            if remote.sock is not None:
+                dead_streak = 0
+                continue
+            if not remote_name:
+                continue
+            if config_pane_state().get(remote_name) != "dead":
+                dead_streak = 0
+                continue
+            dead_streak += 1
+            if dead_streak < 2:
+                continue
+            log("[route] env=%s has no live TUI and tunnel is down; closing env"
+                % (cfg.get("envId") if cfg else "?"))
+            try:
+                await ws.close()
+            except Exception:
+                pass
+            return
+
+    reaper_task = asyncio.create_task(reaper())
+
     pending = {}
 
     async def ensure_deadline(conn):
@@ -558,9 +606,9 @@ async def route_role_handler(ws, path=None):
     finally:
         # The app-server closed this environment connection: stop its readers
         # and drop the outbound exec-server sockets so they do not reconnect.
-        for t in (remote_task, win_task):
+        for t in (remote_task, win_task, reaper_task):
             t.cancel()
-        await asyncio.gather(remote_task, win_task, return_exceptions=True)
+        await asyncio.gather(remote_task, win_task, reaper_task, return_exceptions=True)
         await remote.close()
         await win.close()
 
