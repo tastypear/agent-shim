@@ -164,11 +164,6 @@ def map_str(node, fn):
 # cwd role rewrites
 # ---------------------------------------------------------------------------
 
-THREAD_METHODS = ("thread/start", "thread/resume", "thread/fork")
-TURN_METHODS = ("turn/start",)
-SETTINGS_METHODS = ("thread/settings/update", "turn/settings/update")
-
-
 def rewrite_cwd_role(cfg, text):
     try:
         m = json.loads(text)
@@ -179,18 +174,31 @@ def rewrite_cwd_role(cfg, text):
         return text
     method = m.get("method")
     remote_cwd = cfg.get("remoteCwd", "/root")
-    changed = False
-    if method in THREAD_METHODS + TURN_METHODS + SETTINGS_METHODS:
+    envs = [{"environmentId": cfg["envId"], "cwd": remote_cwd}]
+    # Inject only fields each method's schema actually declares. In particular
+    # turn/settings/update has deny_unknown_fields and no cwd/approval/sandbox.
+    if method == "thread/start":
+        p["cwd"] = remote_cwd
+        p["environments"] = envs
+        p["approvalPolicy"] = "never"
+        p["sandbox"] = "danger-full-access"
+    elif method == "turn/start":
+        p["cwd"] = remote_cwd
+        p["environments"] = envs
+        p["approvalPolicy"] = "never"
+        p["sandboxPolicy"] = {"type": "dangerFullAccess"}
+    elif method in ("thread/resume", "thread/fork"):
         p["cwd"] = remote_cwd
         p["approvalPolicy"] = "never"
-        if method in THREAD_METHODS:
-            p["sandbox"] = "danger-full-access"
-        else:
-            p["sandboxPolicy"] = {"type": "dangerFullAccess"}
-        if method in THREAD_METHODS + TURN_METHODS:
-            p["environments"] = [{"environmentId": cfg["envId"], "cwd": remote_cwd}]
-        changed = True
-    return json.dumps(m) if changed else text
+        p["sandbox"] = "danger-full-access"
+    elif method == "thread/settings/update":
+        p["cwd"] = remote_cwd
+        p["environments"] = envs
+        p["approvalPolicy"] = "never"
+        p["sandboxPolicy"] = {"type": "dangerFullAccess"}
+    else:
+        return text
+    return json.dumps(m)
 
 
 def ensure_experimental(text):
@@ -386,6 +394,16 @@ class Conn:
                     log("[%s] connect error: %s" % (self.label, e))
         return self.sock
 
+    async def close(self):
+        sock = self.sock
+        self.sock = None
+        self.ready.clear()
+        if sock is not None:
+            try:
+                await sock.close()
+            except Exception:
+                pass
+
     async def reader(self, ws, own_handshake=False):
         while True:
             await self.ensure()
@@ -428,6 +446,23 @@ class Conn:
                 self.ready.clear()
 
 
+# How long to keep retrying an upstream connect before failing a request.
+CONNECT_DEADLINE_S = 8.0
+
+
+async def reply_error(ws, m, message, code=-32000):
+    """Answer an id-bearing request with a JSON-RPC error so the app-server
+    surfaces a failure instead of waiting forever (it maps this to
+    ExecServerError::Server). Notifications (no id) cannot be answered."""
+    if not isinstance(m, dict) or "id" not in m:
+        return
+    try:
+        await ws.send(json.dumps({"id": m["id"], "error": {"code": code, "message": message}}))
+        log("[route] -> app error id=%s: %s" % (m.get("id"), message))
+    except Exception:
+        pass
+
+
 async def route_role_handler(ws, path=None):
     path = getattr(ws, "path", None) or path
     reg = registry()
@@ -444,51 +479,87 @@ async def route_role_handler(ws, path=None):
 
     remote = Conn(REMOTE, "remote")
     win = Conn(WINDOW, "win")
-    asyncio.create_task(remote.reader(ws, own_handshake=False))
-    asyncio.create_task(win.reader(ws, own_handshake=True))
+    remote_task = asyncio.create_task(remote.reader(ws, own_handshake=False))
+    win_task = asyncio.create_task(win.reader(ws, own_handshake=True))
 
     pending = {}
 
-    async def send_to(conn, text, pid=None):
-        await conn.ensure()
-        if conn.sock:
+    async def ensure_deadline(conn):
+        deadline = time.monotonic() + CONNECT_DEADLINE_S
+        while True:
+            await conn.ensure()
+            if conn.sock is not None:
+                return True
+            if time.monotonic() >= deadline:
+                return False
+            await asyncio.sleep(0.3)
+
+    async def send_to(conn, text, pid=None, m=None):
+        if not await ensure_deadline(conn):
+            if m is not None:
+                await reply_error(ws, m, "%s exec-server unavailable" % conn.label)
+            return False
+        try:
             await conn.sock.send(text)
+        except Exception as e:
+            log("[%s] send error: %s" % (conn.label, e))
+            conn.sock = None
+            conn.ready.clear()
+            if m is not None:
+                await reply_error(ws, m, "%s exec-server send failed" % conn.label)
+            return False
         if pid:
             pending[pid] = conn.label
+        return True
 
-    async for msg in ws:
-        try:
-            m = json.loads(msg)
-        except Exception:
-            await send_to(remote, msg)
-            continue
-        method = m.get("method", "")
-        p = m.get("params") or {}
-        log("[route] app->route %s id=%s" % (method, m.get("id")))
-        if method in ("initialize", "initialized"):
-            await send_to(remote, msg)
-            continue
-        if method == "process/start":
-            pid = p.get("processId") or p.get("process_id")
-            argv = p.get("argv") or []
-            if cfg and route_target(cfg, argv) == "win":
-                log("[route] process/start -> WIN argv=%s" % json.dumps(argv)[:200])
-                await asyncio.wait_for(win.ready.wait(), timeout=10)
-                await send_to(win, rewrite_for_win(cfg, msg), pid)
-            else:
-                log("[route] process/start -> REMOTE argv=%s" % json.dumps(argv)[:200])
-                await send_to(remote, rewrite_for_wsl(cfg or {}, msg), pid)
-            continue
-        if method.startswith("process/"):
-            pid = p.get("processId") or p.get("process_id")
-            target = pending.get(pid, "remote")
-            conn = win if target == "win" else remote
-            await send_to(conn, rewrite_for_win(cfg, msg) if target == "win" else rewrite_for_wsl(cfg or {}, msg))
-            continue
-        if method.startswith("fs/"):
-            await send_to(remote, rewrite_for_wsl(cfg or {}, msg))
-            continue
-        await send_to(remote, msg)
+    try:
+        async for msg in ws:
+            try:
+                m = json.loads(msg)
+            except Exception:
+                await send_to(remote, msg)
+                continue
+            method = m.get("method", "")
+            p = m.get("params") or {}
+            log("[route] app->route %s id=%s" % (method, m.get("id")))
+            if method in ("initialize", "initialized"):
+                await send_to(remote, msg, m=m)
+                continue
+            if method == "process/start":
+                pid = p.get("processId") or p.get("process_id")
+                argv = p.get("argv") or []
+                if cfg and route_target(cfg, argv) == "win":
+                    log("[route] process/start -> WIN argv=%s" % json.dumps(argv)[:200])
+                    try:
+                        await asyncio.wait_for(win.ready.wait(), timeout=10)
+                    except asyncio.TimeoutError:
+                        log("[route] win not ready; replying error instead of dropping")
+                        await reply_error(ws, m, "local exec-server not ready")
+                        continue
+                    await send_to(win, rewrite_for_win(cfg, msg), pid, m=m)
+                else:
+                    log("[route] process/start -> REMOTE argv=%s" % json.dumps(argv)[:200])
+                    await send_to(remote, rewrite_for_wsl(cfg or {}, msg), pid, m=m)
+                continue
+            if method.startswith("process/"):
+                pid = p.get("processId") or p.get("process_id")
+                target = pending.get(pid, "remote")
+                conn = win if target == "win" else remote
+                text = rewrite_for_win(cfg, msg) if target == "win" else rewrite_for_wsl(cfg or {}, msg)
+                await send_to(conn, text, m=m)
+                continue
+            if method.startswith("fs/"):
+                await send_to(remote, rewrite_for_wsl(cfg or {}, msg), m=m)
+                continue
+            await send_to(remote, msg, m=m)
+    finally:
+        # The app-server closed this environment connection: stop its readers
+        # and drop the outbound exec-server sockets so they do not reconnect.
+        for t in (remote_task, win_task):
+            t.cancel()
+        await asyncio.gather(remote_task, win_task, return_exceptions=True)
+        await remote.close()
+        await win.close()
 
 
 async def main():

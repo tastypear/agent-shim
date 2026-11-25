@@ -226,6 +226,18 @@ def wait_port(port, timeout=20, host="127.0.0.1"):
     return False
 
 
+def remote_port_listening(client, port):
+    """Probe a remote loopback port without assuming `ss` exists: try ss,
+    netstat, then /proc/net/tcp (hex) so minimal hosts still work."""
+    hexp = "%04X" % int(port)
+    cmd = (
+        "{ ss -ltn 2>/dev/null; netstat -ltn 2>/dev/null; cat /proc/net/tcp 2>/dev/null; } "
+        "| grep -qiE '(:%d |:%s )' && echo up || echo down" % (port, hexp)
+    )
+    rc, out, _ = run_ssh(client, cmd)
+    return out.strip() == "up"
+
+
 def start_detached(argv, env=None, logfile=None):
     """Start a process detached so it survives the launcher exiting."""
     env = dict(os.environ if env is None else env)
@@ -395,8 +407,7 @@ def start_remote_exec_server(cfg, client, rdir):
     home = "/opt/codex-remote/home"
     pidfile = "/opt/codex-remote/exec-server.pid"
     arch = cfg.get("_remoteArch", "x86_64")
-    rc, out, _ = run_ssh(client, "ss -ltn 2>/dev/null | grep -q ':%d ' && echo up || echo down" % port)
-    if out.strip() == "up":
+    if remote_port_listening(client, port):
         log("remote exec-server already up on %d" % port)
         return
     bin = "%s/%s" % (rdir, _bin_name(arch))
@@ -419,8 +430,7 @@ def start_remote_exec_server(cfg, client, rdir):
 def wait_remote_port(cfg, client, port, timeout=20):
     deadline = time.time() + timeout
     while time.time() < deadline:
-        rc, out, _ = run_ssh(client, "ss -ltn 2>/dev/null | grep -q ':%d ' && echo up || echo down" % port)
-        if out.strip() == "up":
+        if remote_port_listening(client, port):
             return True
         time.sleep(0.5)
     return False
@@ -533,8 +543,12 @@ def write_registry(entry):
 
 
 def make_env_id(cfg, pane_id):
-    safe = re.sub(r"[^A-Za-z0-9]+", "-", pane_id or "nopane").strip("-").lower()
-    return "%s-%s" % (cfg["_name"], safe)
+    raw = pane_id or "nopane"
+    safe = re.sub(r"[^A-Za-z0-9]+", "-", raw).strip("-") or "pane"
+    # A short hash of the ORIGINAL id keeps distinct panes distinct even after
+    # sanitizing (w6:pB vs w6:pb, a:b vs a-b) so routing cannot cross over.
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:6]
+    return "%s-%s-%s" % (cfg["_name"], safe, digest)
 
 
 def make_token(cfg, pane_id):

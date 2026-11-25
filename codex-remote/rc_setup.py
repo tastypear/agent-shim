@@ -27,10 +27,9 @@ def main():
             cfg["paths"]["remoteHome"] = out.strip() or "/root"
         rc_common.sync_skills(cfg, client)
         ports = cfg["ports"]
-        rc, out, _ = rc_common.run_ssh(
-            client, "ss -ltn | grep ':%d '" % ports["remoteExecServer"]
-        )
-        rc_common.log("remote exec-server port %d: %s" % (ports["remoteExecServer"], out.strip() or "not found"))
+        up = rc_common.remote_port_listening(client, ports["remoteExecServer"])
+        rc_common.log("remote exec-server port %d: %s"
+                      % (ports["remoteExecServer"], "up" if up else "not found"))
     finally:
         client.close()
 
