@@ -9,10 +9,10 @@ All components are Python (no Node). Topology, per connection config:
 
 ```
 local Windows                                  remote Linux (via SSH)
-  codex TUI ──► shared proxy (cwd port)  ──┐
-                    │  bearer token -> pane │
+  codex TUI ──► shared proxy (1 port)  ──┐
+                    │  path / + bearer -> pane│
                     ▼                       │
-             single app-server  ────────────┼──► shared proxy (route port)
+             single app-server  ────────────┼──► shared proxy (same port)
              (local ~/.codex)               │        │ /env/<id> -> pane
                                             │        ├─► remote exec-server  (default)
                                             │        └─► Windows exec-server (local allow-list)
@@ -22,8 +22,10 @@ local Windows                                  remote Linux (via SSH)
 Processes are shared and long-lived, and **not** per pane:
 
 - **global** (one each, shared by every connection config): `app-server`, the
-  Windows `exec-server`, and the `proxy` (its two listen ports). The first
-  launch fixes their ports in `.run/global.json`; later configs reuse them.
+  Windows `exec-server`, and the `proxy` (a single port demuxes the TUI side
+  by path `/` + bearer token and the app-server side by `/env/<id>`). The
+  first launch fixes their ports in `.run/global.json`; later configs reuse
+  them.
 - **per remote config**: one SSH `tunnel` (the proxy dials this env's tunnel,
   chosen from the pane's registry `tunnelUrl`).
 - **per remote host**: one `exec-server` (runs on that host, not local).
@@ -37,8 +39,8 @@ independent of how many panes you open.
 1. Copy `config.example.json` to `../.agent-shim-codex-<name>-ssh.json` and fill
    in `ssh`, `codex.exe`, `codex.localHome`. For several remotes at once, give
    each config a distinct `tunnel` and `remoteExecServer`; `appServer`,
-   `winExecServer`, `proxyCwd` and `proxyRoute` are global and shared (the
-   first launch's values are stored in `.run/global.json`).
+   `winExecServer` and `proxy` are global and shared (the first launch's
+   values are stored in `.run/global.json`).
 2. Launch from any terminal (PowerShell shown):
 
    ```powershell
@@ -62,6 +64,11 @@ closes the SSH tunnel and exits. The proxy then closes the now-orphaned
 app-server environments so they stop reconnecting. The next launch restarts
 the tunnel automatically. A config whose registry has no recorded pid is left
 alone (treated as "unknown", never reaped).
+
+Outside herdr there is no natural pane id, so each launch gets a unique id
+(`local-<rand>`): multiple plain terminal windows of the same config stay
+independent (distinct envId/token/registry entry), and the tunnel is only
+closed once all of their TUIs have exited.
 
 ## Stop
 

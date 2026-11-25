@@ -34,9 +34,9 @@ def main():
         client.close()
 
     rc_launch.ensure_proxy(cfg)
-    rc_common.log("all shared services ready (app=%d cwd=%d route=%d tunnel=%d win=%d)"
-                  % (ports["appServer"], ports["proxyCwd"], ports["proxyRoute"],
-                     ports["tunnel"], ports["winExecServer"]))
+    rc_common.log("all shared services ready (app=%d proxy=%d tunnel=%d win=%d)"
+                  % (ports["appServer"], ports["proxy"], ports["tunnel"],
+                     ports["winExecServer"]))
     return 0
 
 

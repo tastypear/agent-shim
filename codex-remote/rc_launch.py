@@ -6,6 +6,7 @@ import argparse
 import os
 import subprocess
 import sys
+import uuid
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import rc_common
@@ -34,17 +35,19 @@ def ensure_remote(cfg):
 
 def ensure_proxy(cfg):
     ports = cfg["ports"]
-    if rc_common.port_open(ports["proxyCwd"]) and rc_common.port_open(ports["proxyRoute"]):
+    port = ports["proxyCwd"]  # single proxy port (== proxyRoute after coercion)
+    if rc_common.port_open(port):
         return
-    rc_common.log("starting shared proxy cwd=%d route=%d" % (ports["proxyCwd"], ports["proxyRoute"]))
+    rc_common.log("starting shared proxy on %d" % port)
     run_dir = os.path.join(rc_common.RUN, cfg["_name"])
     os.makedirs(run_dir, exist_ok=True)
     rc_common.ensure_registry_dir()
     env = dict(os.environ)
     env.update({
-        "CP_CWD_PORT": str(ports["proxyCwd"]),
-        "CP_ROUTE_PORT": str(ports["proxyRoute"]),
+        "CP_PROXY_PORT": str(port),
         "CP_UPSTREAM": "ws://127.0.0.1:%d" % ports["appServer"],
+        # Fallback remote for envs without a registry tunnelUrl; the shared
+        # proxy normally picks the tunnel per env from the registry.
         "CP_REMOTE": "ws://127.0.0.1:%d" % ports["tunnel"],
         "CP_WINDOW": "ws://127.0.0.1:%d" % ports["winExecServer"],
         "CP_REGISTRY": rc_common.REGISTRY,
@@ -55,7 +58,7 @@ def ensure_proxy(cfg):
         env=env,
         logfile=os.path.join(run_dir, "proxy.stdout.log"),
     )
-    if not (rc_common.wait_port(ports["proxyCwd"]) and rc_common.wait_port(ports["proxyRoute"])):
+    if not rc_common.wait_port(port):
         raise SystemExit("proxy did not start; see %s" % os.path.join(run_dir, "proxy.stdout.log"))
 
 
@@ -90,7 +93,13 @@ def main():
     rc_common.ensure_local_services(cfg)
     ensure_proxy(cfg)
 
-    pane = os.environ.get("HERDR_PANE_ID") or "nopane"
+    # Inside herdr the pane id is stable and unique; outside it there is no
+    # natural identity, so give each launch a unique id. Otherwise two windows
+    # would share the same token/envId/registry entry (clobbering each other's
+    # tuiPid and breaking tunnel lifetime).
+    pane = os.environ.get("HERDR_PANE_ID")
+    if not pane:
+        pane = "local-" + uuid.uuid4().hex[:8]
     env_id = rc_common.make_env_id(cfg, pane)
     token = rc_common.make_token(cfg, pane)
     remote_cwd = cfg["paths"].get("vcwd") or cfg["paths"]["remoteHome"] or "/root"

@@ -14,8 +14,7 @@
   },
   "ports": {
     "appServer": 19100,
-    "proxyCwd": 19101,
-    "proxyRoute": 19102,
+    "proxy": 19101,
     "tunnel": 19103,
     "winExecServer": 19200,
     "remoteExecServer": 19104

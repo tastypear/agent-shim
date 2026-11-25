@@ -32,8 +32,9 @@ DEFAULTS = {
     "codex": {"exe": "", "execServerVersion": "0.171.0", "localHome": ""},
     "ports": {
         "appServer": 19100,
+        "proxy": 19101,
         "proxyCwd": 19101,
-        "proxyRoute": 19102,
+        "proxyRoute": 19101,
         "tunnel": 19103,
         "winExecServer": 19200,
         "remoteExecServer": 19104,
@@ -51,7 +52,7 @@ def log(msg):
     print("[%s] %s" % (stamp, msg), flush=True)
 
 
-GLOBAL_KEYS = ("appServer", "winExecServer", "proxyCwd", "proxyRoute")
+GLOBAL_KEYS = ("appServer", "winExecServer", "proxy")
 
 
 def global_ports(want):
@@ -97,13 +98,23 @@ def load_config(path):
     merged["_path"] = path
     base = os.path.splitext(os.path.basename(path))[0]
     merged["_name"] = merged.get("name") or base.lstrip(".").replace(".agent-shim-codex-", "").replace("-ssh", "")
-    want = {k: int(merged["ports"][k]) for k in GLOBAL_KEYS}
+    want = {
+        "appServer": int(merged["ports"]["appServer"]),
+        "winExecServer": int(merged["ports"]["winExecServer"]),
+        # One proxy port (cwd+route demuxed by path); accept old proxyCwd/Route.
+        "proxy": int(merged["ports"].get("proxy")
+                     or merged["ports"].get("proxyCwd")
+                     or merged["ports"].get("proxyRoute")
+                     or 19101),
+    }
     g = global_ports(want)
     if want != g:
         log("global ports are %s (config %s said %s); using global"
             % (g, merged["_name"], want))
     for k in GLOBAL_KEYS:
         merged["ports"][k] = g[k]
+    merged["ports"]["proxyCwd"] = g["proxy"]
+    merged["ports"]["proxyRoute"] = g["proxy"]
     return merged
 
 

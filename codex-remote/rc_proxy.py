@@ -28,8 +28,9 @@ from urllib.parse import urlparse
 from websockets import serve, connect
 
 HOST = "127.0.0.1"
-CWD_PORT = int(os.environ.get("CP_CWD_PORT", "0"))
-ROUTE_PORT = int(os.environ.get("CP_ROUTE_PORT", "0"))
+# One proxy port serves both roles, demuxed by path: `/env/<id>` -> route role
+# (app-server side), everything else (path `/` + bearer token) -> cwd role.
+PROXY_PORT = int(os.environ.get("CP_PROXY_PORT") or os.environ.get("CP_CWD_PORT") or "0")
 UPSTREAM = os.environ.get("CP_UPSTREAM", "ws://127.0.0.1:19100")
 REMOTE = os.environ.get("CP_REMOTE", "ws://127.0.0.1:19103")
 WINDOW = os.environ.get("CP_WINDOW", "ws://127.0.0.1:19200")
@@ -366,13 +367,13 @@ async def cwd_role_handler(ws, path=None):
                             "params": {
                                 "environmentId": cfg["envId"],
                                 "execServerUrl": "ws://%s:%d/env/%s"
-                                % (HOST, ROUTE_PORT, cfg["envId"]),
+                                % (HOST, PROXY_PORT, cfg["envId"]),
                                 "connectTimeoutMs": 15000,
                             },
                         }
                         await up.send(json.dumps(add))
                         log("[cwd] environment/add env=%s url=ws://%s:%d/env/%s"
-                            % (cfg["envId"], HOST, ROUTE_PORT, cfg["envId"]))
+                            % (cfg["envId"], HOST, PROXY_PORT, cfg["envId"]))
                     else:
                         await up.send(msg)
                     continue
@@ -613,15 +614,24 @@ async def route_role_handler(ws, path=None):
         await win.close()
 
 
+async def dispatch(ws, path=None):
+    """Single listener: demux by path. app-server connects to /env/<id> (route
+    role); the TUI connects to the root path / (cwd role, bearer-token)."""
+    p = getattr(ws, "path", None) or path or "/"
+    if p.startswith("/env/"):
+        await route_role_handler(ws, p)
+    else:
+        await cwd_role_handler(ws, p)
+
+
 async def main():
-    if not CWD_PORT or not ROUTE_PORT:
-        print("CP_CWD_PORT and CP_ROUTE_PORT are required")
+    if not PROXY_PORT:
+        print("CP_PROXY_PORT (or legacy CP_CWD_PORT) is required")
         return
-    log("=== codex-remote proxy start cwd=%d route=%d upstream=%s remote=%s window=%s ==="
-        % (CWD_PORT, ROUTE_PORT, UPSTREAM, REMOTE, WINDOW))
-    cwd_server = await serve(cwd_role_handler, HOST, CWD_PORT)
-    route_server = await serve(route_role_handler, HOST, ROUTE_PORT)
-    log("listening cwd=%d route=%d" % (CWD_PORT, ROUTE_PORT))
+    log("=== codex-remote proxy start port=%d upstream=%s remote=%s window=%s ==="
+        % (PROXY_PORT, UPSTREAM, REMOTE, WINDOW))
+    server = await serve(dispatch, HOST, PROXY_PORT)
+    log("listening proxy=%d (cwd+route demuxed by path)" % PROXY_PORT)
     await asyncio.Future()
 
 

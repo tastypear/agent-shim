@@ -57,7 +57,6 @@ def main():
             ("app-server(global)", ports["appServer"]),
             ("windows-exec-server(global)", ports["winExecServer"]),
             ("proxy(global)", ports["proxyCwd"]),
-            ("proxy(global)", ports["proxyRoute"]),
         ]
     killed = set()
     for label, port in targets:
@@ -74,10 +73,9 @@ def main():
     if not killed:
         rc_common.log("no running services found for %s" % args.config)
     if not args.shared:
-        rc_common.log("note: global app-server %d, Windows exec-server %d and proxy %d/%d "
+        rc_common.log("note: global app-server %d, Windows exec-server %d and proxy %d "
                       "are left running; pass --shared to stop them too"
-                      % (ports["appServer"], ports["winExecServer"],
-                         ports["proxyCwd"], ports["proxyRoute"]))
+                      % (ports["appServer"], ports["winExecServer"], ports["proxy"]))
     rc_common.log("note: the remote exec-server keeps running on the remote host")
 
 
