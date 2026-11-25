@@ -13,7 +13,8 @@ import rc_common
 def port_pids(port):
     pids = set()
     try:
-        out = subprocess.check_output(["netstat", "-ano", "-p", "TCP"], text=True)
+        out = subprocess.check_output(["netstat", "-ano", "-p", "TCP"], text=True,
+                                      creationflags=0x08000000)
     except Exception:
         return pids
     token = ":%d" % port
@@ -30,7 +31,8 @@ def port_pids(port):
 def proc_name(pid):
     try:
         out = subprocess.check_output(
-            ["tasklist", "/FI", "PID eq %d" % pid, "/FO", "CSV", "/NH"], text=True
+            ["tasklist", "/FI", "PID eq %d" % pid, "/FO", "CSV", "/NH"], text=True,
+            creationflags=0x08000000,
         )
         line = out.strip().splitlines()[0]
         return line.split(",")[0].strip('"').lower()
@@ -67,7 +69,8 @@ def main():
                 continue
             if pid in killed:
                 continue
-            subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
+            subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True,
+                           creationflags=0x08000000)
             killed.add(pid)
             rc_common.log("stopped %s on port %d (pid %d, %s)" % (label, port, pid, name))
     if not killed:

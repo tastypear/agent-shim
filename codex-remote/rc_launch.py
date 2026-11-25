@@ -6,6 +6,7 @@ import argparse
 import os
 import subprocess
 import sys
+import time
 import uuid
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -28,9 +29,14 @@ def ensure_remote(cfg):
          "--config", cfg["_path"]],
         logfile=os.path.join(run_dir, "remote-svc.log"),
     )
-    if not rc_common.wait_port(port, timeout=cfg.get("readyTimeout", 15000) / 1000.0 + 30):
-        raise SystemExit("remote service did not open tunnel port %d; see %s"
-                         % (port, os.path.join(run_dir, "remote-svc.log")))
+    # Cold install can take a couple of minutes (download+upload ~28MB). The
+    # svc keeps working in the background even if we stop waiting, so this is a
+    # generous bound, not a hard deadline for the install itself.
+    timeout = max(cfg.get("readyTimeout", 15000) / 1000.0 + 30, 300)
+    if not rc_common.wait_port(port, timeout=timeout):
+        raise SystemExit("remote service did not open tunnel port %d within %.0fs; "
+                         "it may still be installing in the background -- see %s"
+                         % (port, timeout, os.path.join(run_dir, "remote-svc.log")))
 
 
 def ensure_proxy(cfg):
@@ -75,24 +81,6 @@ def main():
     local_home = cfg["codex"].get("localHome") or os.path.expanduser("~")
     cfg["codex"]["localHome"] = local_home
 
-    # Remote is required for install/start/tunnel and for home detection + sync.
-    ensure_remote(cfg)
-
-    # Detect remote home and sync skills over one short SSH session.
-    client = rc_common.connect_ssh(cfg)
-    try:
-        remote_home = cfg["paths"].get("remoteHome") or ""
-        if not remote_home:
-            rc, out, _ = rc_common.run_ssh(client, "echo $HOME")
-            remote_home = out.strip() or "/root"
-            cfg["paths"]["remoteHome"] = remote_home
-        rc_common.sync_skills(cfg, client)
-    finally:
-        client.close()
-
-    rc_common.ensure_local_services(cfg)
-    ensure_proxy(cfg)
-
     # Every launch gets a unique suffix so envId/token/registry entry never
     # collide. herdr pane ids are only unique within one herdr server/session,
     # and plain terminal windows have none at all, so we always append one.
@@ -123,8 +111,36 @@ def main():
         "localWhitelist": cfg["exec"].get("localWhitelist") or [],
         "remoteOverride": cfg["exec"].get("remoteOverride") or [],
         "yolo": cfg.get("yolo", True),
+        # Pending marker: the tunnel service must not reap this config while the
+        # (possibly slow) remote setup below is still running.
+        "pending": True,
+        "pendingAt": time.time(),
     }
-    path = rc_common.write_registry(entry)
+    rc_common.write_registry(entry)
+    rc_common.log("registered pane=%s envId=%s token=%s (pending)"
+                  % (pane, env_id, token[:8]))
+
+    # Remote is required for install/start/tunnel and for home detection + sync.
+    ensure_remote(cfg)
+
+    # Detect remote home and sync skills over one short SSH session.
+    client = rc_common.connect_ssh(cfg)
+    try:
+        remote_home = cfg["paths"].get("remoteHome") or ""
+        if not remote_home:
+            rc, out, _ = rc_common.run_ssh(client, "echo $HOME")
+            remote_home = out.strip() or "/root"
+            cfg["paths"]["remoteHome"] = remote_home
+        rc_common.sync_skills(cfg, client)
+    finally:
+        client.close()
+
+    rc_common.ensure_local_services(cfg)
+    ensure_proxy(cfg)
+
+    entry["remoteHome"] = cfg["paths"]["remoteHome"] or "/root"
+    entry["remoteCwd"] = cfg["paths"].get("vcwd") or entry["remoteHome"]
+    rc_common.write_registry(entry)
     rc_common.log("registered pane=%s envId=%s token=%s" % (pane, env_id, token[:8]))
 
     token_env = "CODEX_REMOTE_TOKEN"
@@ -134,9 +150,11 @@ def main():
     argv = [exe, "--remote", url, "--remote-auth-token-env", token_env] + list(args.rest)
     rc_common.log("launching TUI: %s" % " ".join(argv))
     proc = subprocess.Popen(argv, env=env)
-    # Record the TUI pid so the remote service can drop the SSH tunnel once
-    # this pane's TUI exits.
+    # Record the TUI pid and clear the pending marker so the remote service can
+    # drop the SSH tunnel once this pane's TUI exits.
     entry["tuiPid"] = proc.pid
+    entry.pop("pending", None)
+    entry.pop("pendingAt", None)
     rc_common.write_registry(entry)
     return proc.wait()
 

@@ -87,7 +87,7 @@ running on the remote host.
 | File | Purpose |
 |---|---|
 | `rc_common.py` | config load, SSH (paramiko, optional SOCKS5), arch-aware remote install/start, full-duplex tunnel, skills sync, registry |
-| `rc_proxy.py` | shared two-port proxy: cwd role (bearer token -> pane) and route role (`/env/<id>` -> pane); routing, path normalization, yolo |
+| `rc_proxy.py` | shared single-port proxy: demuxes `/env/<id>` (route role) from `/` + bearer token (cwd role); routing, path normalization, yolo |
 | `rc_remote_svc.py` | long-lived remote service: install/start exec-server + hold the SSH tunnel |
 | `rc_launch.py` | per-pane launcher: assemble -> register -> start TUI |
 | `rc_setup.py` | assemble shared services without launching the TUI (status check) |

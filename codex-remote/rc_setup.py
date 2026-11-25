@@ -20,13 +20,13 @@ def main():
     rc_common.ensure_local_services(cfg)
     rc_launch.ensure_remote(cfg)
 
+    ports = cfg["ports"]
     client = rc_common.connect_ssh(cfg)
     try:
         if not cfg["paths"].get("remoteHome"):
             _rc, out, _ = rc_common.run_ssh(client, "echo $HOME")
             cfg["paths"]["remoteHome"] = out.strip() or "/root"
         rc_common.sync_skills(cfg, client)
-        ports = cfg["ports"]
         up = rc_common.remote_port_listening(client, ports["remoteExecServer"])
         rc_common.log("remote exec-server port %d: %s"
                       % (ports["remoteExecServer"], "up" if up else "not found"))

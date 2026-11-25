@@ -407,7 +407,7 @@ def _exec_server_tarball(cfg, arch):
         if prox:
             phost, _, pport = prox.partition(":")
             cmd[2:2] = ["--proxy", "socks5://%s:%s" % (phost, pport)]
-        subprocess.run(cmd, check=True)
+        subprocess.run(cmd, check=True, creationflags=0x08000000)  # CREATE_NO_WINDOW
     return path
 
 
@@ -601,34 +601,101 @@ def make_token(cfg, pane_id):
     return hashlib.sha256(seed.encode("utf-8")).hexdigest()[:32]
 
 
-def pid_alive(pid):
-    """True if a process with this PID is alive (Windows)."""
-    if not pid:
-        return False
+_PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+_ERROR_INVALID_PARAMETER = 87
+
+
+def _win_image_name(pid):
+    """Image name (lowercase, no .exe) of a live pid via Win32 API, or None.
+    Uses OpenProcess + QueryFullProcessImageNameW so there is no child process
+    (tasklist in a detached process would flash a console window every poll)."""
     try:
+        import ctypes
+        from ctypes import wintypes
+
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.OpenProcess.restype = wintypes.HANDLE
+        k32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+        k32.QueryFullProcessImageNameW.restype = wintypes.BOOL
+        k32.QueryFullProcessImageNameW.argtypes = (
+            wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR,
+            ctypes.POINTER(wintypes.DWORD),
+        )
+        k32.CloseHandle.argtypes = (wintypes.HANDLE,)
+        h = k32.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid))
+        if not h:
+            err = ctypes.get_last_error()
+            if err == _ERROR_INVALID_PARAMETER:
+                return None          # no such process -> dead
+            return ""                # exists but not queryable -> alive, name unknown
+        try:
+            buf = ctypes.create_unicode_buffer(1024)
+            size = wintypes.DWORD(len(buf))
+            if not k32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(size)):
+                return ""
+            return os.path.basename(buf.value).lower()
+        finally:
+            k32.CloseHandle(h)
+    except Exception:
+        return _win_image_name_fallback(pid)
+
+
+def _win_image_name_fallback(pid):
+    """Hidden tasklist fallback (used only if ctypes is unavailable)."""
+    try:
+        flags = 0x08000000  # CREATE_NO_WINDOW
         out = subprocess.check_output(
             ["tasklist", "/FI", "PID eq %d" % int(pid), "/FO", "CSV", "/NH"],
-            text=True, stderr=subprocess.DEVNULL,
+            text=True, stderr=subprocess.DEVNULL, creationflags=flags,
         )
-        return ("\"%d\"" % int(pid)) in out
+        if "\"%d\"" % int(pid) not in out:
+            return None
+        name = out.split(",")[0].strip().strip('"').lower()
+        return name
     except Exception:
-        return True  # unknown -> assume alive (don't tear down on probe failure)
+        return ""  # probe failed -> treat as alive
+
+
+def pid_alive(pid, expect="codex"):
+    """True if pid is alive. When expect is given, also require the image name
+    to match, so a recycled PID owned by an unrelated process is not mistaken
+    for a live TUI."""
+    if not pid:
+        return False
+    name = _win_image_name(pid)
+    if name is None:
+        return False
+    if name == "":
+        return True                  # exists but name unknown -> assume alive
+    if expect and expect not in name:
+        return False
+    return True
+
+
+# A launcher writes a pending marker before the (possibly slow) remote setup so
+# the tunnel service does not reap a just-started config. Stale markers expire.
+PENDING_TTL_S = 300
 
 
 def config_pane_state():
     """configName -> 'alive' | 'dead' | 'unknown'.
 
-    'dead' means we recorded tuiPids for this config and none are alive, so it
-    is safe to drop its SSH tunnel. 'unknown' means no tuiPid was ever recorded
-    (legacy/test entries); we do NOT reap on unknown, to protect live sessions.
+    'alive'    : some recorded tuiPid is alive (and matches the expected image).
+    'pending'  : a launcher is mid-startup for this config (recent marker); treat
+                 like alive so the tunnel is not reaped.
+    'dead'     : pids were recorded, none alive, and no pending marker.
+    'unknown'  : no pid/marker ever recorded (legacy/test); never reaped.
     """
     reg = load_registry()
+    now = time.time()
     seen = {}
     for e in reg.values():
         name = e.get("configName")
         if not name:
             continue
-        st = seen.setdefault(name, {"recorded": False, "alive": False})
+        st = seen.setdefault(name, {"recorded": False, "alive": False, "pending": False})
+        if e.get("pending") and (now - float(e.get("pendingAt") or 0) < PENDING_TTL_S):
+            st["pending"] = True
         pid = e.get("tuiPid")
         if pid:
             st["recorded"] = True
@@ -638,6 +705,8 @@ def config_pane_state():
     for name, st in seen.items():
         if st["alive"]:
             out[name] = "alive"
+        elif st["pending"]:
+            out[name] = "pending"
         elif st["recorded"]:
             out[name] = "dead"
         else:

@@ -268,13 +268,14 @@ def rewrite_for_wsl(cfg, text):
     remote_cwd = cfg.get("remoteCwd", "/root")
     win_home = cfg.get("localHome", "C:\\Users")
     remote_home = cfg.get("remoteHome", "/root")
-    p["cwd"] = _uri(remote_cwd)
-    if isinstance(p.get("argv"), list):
-        p["argv"] = [win_to_posix(a, win_home, remote_home) for a in p["argv"]]
-    if "sandbox" in p:
-        p["sandbox"] = map_str(p["sandbox"], lambda s: win_to_posix(s, win_home, remote_home))
-    if "envPolicy" in p:
-        p["envPolicy"] = map_str(p["envPolicy"], lambda s: win_to_posix(s, win_home, remote_home))
+    if method == "process/start":
+        p["cwd"] = _uri(remote_cwd)
+        if isinstance(p.get("argv"), list):
+            p["argv"] = [win_to_posix(a, win_home, remote_home) for a in p["argv"]]
+        if "sandbox" in p:
+            p["sandbox"] = map_str(p["sandbox"], lambda s: win_to_posix(s, win_home, remote_home))
+        if "envPolicy" in p:
+            p["envPolicy"] = map_str(p["envPolicy"], lambda s: win_to_posix(s, win_home, remote_home))
     # fs/* paths are file:// URIs -> normalize to the remote home.
     if method.startswith("fs/"):
         norm = lambda s: _uri(win_to_posix(s, win_home, remote_home))
@@ -320,10 +321,20 @@ def rewrite_for_win(cfg, text):
 # cwd role (TUI side)
 # ---------------------------------------------------------------------------
 
+def _ws_headers(ws):
+    """Authorization headers across websockets versions: legacy exposes
+    request_headers; newer exposes request.headers."""
+    hdrs = getattr(ws, "request_headers", None)
+    if hdrs is None:
+        req = getattr(ws, "request", None)
+        hdrs = getattr(req, "headers", None) if req is not None else None
+    return hdrs
+
+
 async def cwd_role_handler(ws, path=None):
-    auth = None
+    hdrs = _ws_headers(ws)
     try:
-        auth = ws.request_headers.get("Authorization")
+        auth = hdrs.get("Authorization") if hdrs is not None else None
     except Exception:
         auth = None
     reg = registry()
@@ -342,6 +353,15 @@ async def cwd_role_handler(ws, path=None):
     async def pump_upstream():
         try:
             async for msg in up:
+                # Swallow responses to our own injected environment/add; the
+                # TUI never issued those ids and would see unknown replies.
+                if "\"cr-add-" in msg:
+                    try:
+                        mm = json.loads(msg)
+                    except Exception:
+                        mm = None
+                    if isinstance(mm, dict) and str(mm.get("id", "")).startswith("cr-add-"):
+                        continue
                 await ws.send(msg)
         except Exception:
             pass
@@ -483,6 +503,9 @@ async def reply_error(ws, m, message, code=-32000):
 
 async def route_role_handler(ws, path=None):
     path = getattr(ws, "path", None) or path
+    if not path:
+        req = getattr(ws, "request", None)
+        path = getattr(req, "path", None) if req is not None else None
     reg = registry()
     cfg = None
     if path:
@@ -594,11 +617,11 @@ async def route_role_handler(ws, path=None):
                     await send_to(remote, rewrite_for_wsl(cfg or {}, msg), pid, m=m)
                 continue
             if method.startswith("process/"):
+                # read/write/signal/terminate carry only processId (+ payload);
+                # forward verbatim to whichever side started this process.
                 pid = p.get("processId") or p.get("process_id")
-                target = pending.get(pid, "remote")
-                conn = win if target == "win" else remote
-                text = rewrite_for_win(cfg, msg) if target == "win" else rewrite_for_wsl(cfg or {}, msg)
-                await send_to(conn, text, m=m)
+                conn = win if pending.get(pid) == "win" else remote
+                await send_to(conn, msg, m=m)
                 continue
             if method.startswith("fs/"):
                 await send_to(remote, rewrite_for_wsl(cfg or {}, msg), m=m)
@@ -617,7 +640,11 @@ async def route_role_handler(ws, path=None):
 async def dispatch(ws, path=None):
     """Single listener: demux by path. app-server connects to /env/<id> (route
     role); the TUI connects to the root path / (cwd role, bearer-token)."""
-    p = getattr(ws, "path", None) or path or "/"
+    p = getattr(ws, "path", None) or path
+    if not p:
+        req = getattr(ws, "request", None)
+        p = getattr(req, "path", None) if req is not None else None
+    p = p or "/"
     if p.startswith("/env/"):
         await route_role_handler(ws, p)
     else:
