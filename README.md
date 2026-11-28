@@ -9,6 +9,7 @@ It draws inspiration from "VS Code Remote-SSH + Copilot" but imposes **no perfor
 ## Apps adapted
 - [qodercli](https://www.npmjs.com/package/@qoder-ai/qodercli)
 - Pi (Verification and testing only)
+- [Codex](codex-remote-go/README.md) — Go-based adapter; runs the official Codex TUI on the local host while commands and file operations execute on a remote Linux host.
 
 ## Getting started
 

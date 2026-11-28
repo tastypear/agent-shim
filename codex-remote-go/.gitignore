@@ -1,0 +1,8 @@
+/codex-remote.exe
+/codex-remote.exe~
+/codex-remote-linux-*
+/.cache/
+/.run/
+/.run-wsl-oracle/
+/config.test-*.json
+*.log

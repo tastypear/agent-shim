@@ -1,0 +1,64 @@
+{
+  "transport": "ssh",
+  "name": "myremote",
+  "ssh": {
+    "host": "my-host.example.com",
+    "user": "root",
+    "port": 22,
+    "keyPath": "~/.ssh/id_ed25519",
+    "knownHosts": "",
+    "strictHostKey": false
+  },
+  "paths": {
+    "vcwd": "/root",
+    "remoteHome": "",
+    "socksProxy": ""
+  },
+  "codex": {
+    "exe": "",
+    "execServerVersion": "",
+    "localHome": "",
+    "strictVersion": false
+  },
+  "ports": {
+    "proxy": 19101,
+    "localExecServer": 19200,
+    "remoteExecServer": 19104
+  },
+  "exec": {
+    "localMatch": ["herdr ", "HERDR_"],
+    "localWhitelist": [],
+    "remoteOverride": [],
+    "localPath": "C:\\Program Files\\Git\\bin",
+    "canonicalizeHome": false,
+    "homeAliases": {
+      "local": [
+        "C:\\Users\\me",
+        "C:/Users/me",
+        "/c/Users/me"
+      ],
+      "remote": [
+        "/root"
+      ]
+    },
+    "envPrefixes": ["HERDR_"],
+    "envInclude": [],
+    "envExclude": ["CODEX_REMOTE_TOKEN"],
+    "inheritEnv": false,
+    "env": {}
+  },
+  "sync": {
+    "enabled": true,
+    "whitelist": ["skills"],
+    "exclude": []
+  },
+  "yolo": true,
+  "keepalive": 15000,
+  "readyTimeout": 15000,
+  "proxy": { "idleGraceSec": 30, "debug": false },
+  "remote": {
+    "privateHome": "/opt/codex-remote/home",
+    "installRoot": "/opt/codex-remote/runtimes/codex",
+    "restartOnVersionMismatch": true
+  }
+}
