@@ -35,6 +35,31 @@ go build -o codex-remote.exe ./cmd/codex-remote
 in-process proxy integration suite (fake app-server and exec-servers, no SSH
 needed).
 
+### Release binaries
+
+```powershell
+.\scripts\build-release.ps1 -Version 1.0.0
+```
+
+```bash
+./scripts/build-release.sh 1.0.0
+```
+
+Both produce static `CGO_ENABLED=0` binaries in `dist/` with fixed names:
+
+| Platform | File |
+|---|---|
+| Windows x64 | `codex-remote-windows-amd64.exe` |
+| Windows arm64 | `codex-remote-windows-arm64.exe` |
+| Linux x64 | `codex-remote-linux-amd64` |
+| Linux arm64 | `codex-remote-linux-arm64` |
+| macOS Intel | `codex-remote-darwin-amd64` |
+| macOS Apple Silicon | `codex-remote-darwin-arm64` |
+
+The version is embedded with `-ldflags "-X main.version=..."`, so
+`codex-remote version` reports the release tag without changing the file name.
+On Linux and macOS, run `chmod +x` on the downloaded binary first.
+
 ## Launch
 
 ```powershell
@@ -88,6 +113,11 @@ cd /path/to/codex-remote-go
 go build -o codex-remote-linux-amd64 ./cmd/codex-remote
 ./codex-remote-linux-amd64 launch --config /path/to/config.json
 ```
+
+macOS binaries are built for both `amd64` and `arm64`, but have not been
+verified on real hardware yet. Treat them as experimental: they use `zsh` when
+available, `lsof` for port ownership, and the macOS `platformOs` value. Linux
+`exec-server` targets remain the supported remote side.
 
 ## Architecture
 

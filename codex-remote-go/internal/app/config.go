@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -418,7 +419,10 @@ func (c *Config) LocalHome() string {
 
 func (c *Config) WinPath() string {
 	local := strings.TrimSpace(c.Exec.LocalPath)
-	path := os.Getenv("PATH")
+	path := strings.TrimSpace(os.Getenv("PATH"))
+	if local == "" && runtime.GOOS != "windows" && path == "" {
+		path = "/usr/local/bin:/usr/bin:/bin"
+	}
 	sep := string(os.PathListSeparator)
 	switch {
 	case local != "" && path != "":

@@ -4,5 +4,6 @@
 /.cache/
 /.run/
 /.run-wsl-oracle/
+/dist/
 /config.test-*.json
 *.log

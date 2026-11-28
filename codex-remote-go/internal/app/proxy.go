@@ -183,14 +183,15 @@ func (p *Proxy) orphanRoute(app *WS, envID string) {
 			if sid == "" {
 				sid = "orphan-" + envID
 			}
+			shellName, shellPath := LocalShell()
 			_ = app.Write(encodeMessage(map[string]any{
 				"id": m["id"],
 				"result": map[string]any{
 					"sessionId": sid,
 					"environmentInfo": map[string]any{
-						"shell":           map[string]any{"name": "bash", "path": "/bin/bash"},
+						"shell":           map[string]any{"name": shellName, "path": shellPath},
 						"executorVersion": "0.0.0",
-						"platformOs":      "linux",
+						"platformOs":      PlatformOS(),
 					},
 				},
 			}))

@@ -9,6 +9,10 @@ import (
 	"agent-shim/codex-remote-go/internal/app"
 )
 
+// version is overridden at release build time with
+// -ldflags "-X main.version=<tag version>".
+var version = "1.0.0"
+
 func main() {
 	if len(os.Args) < 2 {
 		usage()
@@ -41,7 +45,7 @@ func main() {
 	case "token":
 		runToken(os.Args[2:])
 	case "version", "--version", "-v":
-		fmt.Println("codex-remote-go 1.0.0")
+		fmt.Printf("codex-remote-go %s\n", version)
 	case "help", "--help", "-h":
 		usage()
 	default:

@@ -88,6 +88,27 @@ func AppServerListenURL() string {
 	return "unix://" + filepath.ToSlash(AppServerSocketPath())
 }
 
+// PlatformOS returns the value codex uses in environmentInfo.platformOs for
+// this host. Only the orphan placeholder needs it; a live exec-server reports
+// its own real platform.
+func PlatformOS() string {
+	switch runtime.GOOS {
+	case "darwin":
+		return "macos"
+	default:
+		return runtime.GOOS
+	}
+}
+
+// LocalShell returns the shell name/path the orphan placeholder advertises.
+// macOS defaults to zsh, Linux to bash.
+func LocalShell() (string, string) {
+	if runtime.GOOS == "darwin" {
+		return "zsh", "/bin/zsh"
+	}
+	return "bash", "/bin/bash"
+}
+
 func UnixSocketOpen(path string) bool {
 	if path == "" {
 		return false
@@ -238,6 +259,8 @@ func resolveBash(cfg *Config) string {
 	names := []string{"bash"}
 	if runtime.GOOS == "windows" {
 		names = []string{"bash.exe", "sh.exe"}
+	} else if runtime.GOOS == "darwin" {
+		names = []string{"zsh", "bash", "sh"}
 	}
 	for _, d := range filepath.SplitList(cfg.Exec.LocalPath) {
 		d = strings.TrimSpace(d)
@@ -252,7 +275,11 @@ func resolveBash(cfg *Config) string {
 		}
 	}
 	if runtime.GOOS != "windows" {
-		for _, name := range []string{"bash", "sh", "zsh"} {
+		fallback := []string{"bash", "sh", "zsh"}
+		if runtime.GOOS == "darwin" {
+			fallback = []string{"zsh", "bash", "sh"}
+		}
+		for _, name := range fallback {
 			if p, err := exec.LookPath(name); err == nil {
 				return p
 			}
