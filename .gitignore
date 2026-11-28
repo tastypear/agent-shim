@@ -25,6 +25,9 @@ profiles/
 knowledge-base/*
 !knowledge-base/README.md
 
+# Ad-hoc debug scripts run from the repo root; formal tests live in test/
+/test_*.js
+
 # OS / editor cruft
 .DS_Store
 Thumbs.db
